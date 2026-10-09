@@ -18,6 +18,7 @@
 
 #include <QAction>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -30,6 +31,28 @@ namespace
 const int NB_CHANNELS = 4;
 const double SAMPLING_RATE = 20000;
 const std::int64_t NB_SAMPLES = 20000;
+
+/** Closes and records every message box shown while it exists. */
+class MessageBoxRecorder
+{
+  public:
+    MessageBoxRecorder()
+    {
+        QObject::connect(&timer, &QTimer::timeout, [this]
+                         {
+            if (QMessageBox* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+            {
+                texts.append(box->text());
+                box->done(QMessageBox::Ok);
+            } });
+        timer.start(0);
+    }
+
+    QStringList texts;
+
+  private:
+    QTimer timer;
+};
 
 } // namespace
 
@@ -66,6 +89,28 @@ class TestNeuroscopeDoc : public QObject
 
         QCOMPARE(doc->getChannelNb(), nbChannels);
         QCOMPARE(doc->getChannelLabels()->size(), nbChannels);
+    }
+
+    // A session remembers when its files were last modified; reopening it with unchanged files does not warn.
+    void reopenASessionWithUnchangedFiles()
+    {
+        const QDir recordingDir(dir.path());
+        const QString datPath = writeRecording(recordingDir, "session", NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
+        writeTextFile(recordingDir.filePath("session.abc.evt"), "10\tstim\n50\tstim\n");
+        MessageBoxRecorder messages;
+        {
+            auto app = testutils::openRecording(datPath);
+            loadFile(app.get(), "slotLoadClusterFiles", writeClusterFile(recordingDir, "session", 1, { { 100, 1 }, { 2000, 2 }, { 5000, 1 } }));
+            loadFile(app.get(), "slotLoadEventFiles", recordingDir.filePath("session.abc.evt"));
+            QMetaObject::invokeMethod(app.get(), "saveSession");
+        }
+        QVERIFY(QFileInfo::exists(recordingDir.filePath("session.nrs")));
+
+        auto app = testutils::openRecording(datPath);
+
+        QVERIFY(app->findChild<QWidget*>("clusterPanel"));
+        QVERIFY(app->findChild<QWidget*>("eventPanel"));
+        QCOMPARE(messages.texts, QStringList());
     }
 
     void closeWithTheFocusInTheStartTime_data()
