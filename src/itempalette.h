@@ -35,6 +35,7 @@
 #include "itemiconview.h"
 
 #include <QScrollArea>
+#include <QTimer>
 #include <qnamespace.h>
 // forward declaration
 class ItemColors;
@@ -148,6 +149,10 @@ class ItemPalette : public QScrollArea
 
     /**Prevent from emitting signal while globaly selecting items*/
     bool isInSelectItems;
+
+    /**Adjusts the size of the groups once for all the items inserted since the last call
+     * to the event loop: each adjustment lays out every item of the groups.*/
+    QTimer adjustSizeTimer;
 
     QVBoxLayout* verticalContainer;
 

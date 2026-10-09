@@ -92,6 +92,22 @@ class TestItemPalette : public QObject
         QCOMPARE(view->gridSize(), QSize(qMax(fontInfo.pixelSize() * 2, widestItem), 15 * 2));
     }
 
+    void groupsAreAdjustedOncePerList()
+    {
+        const auto adjustmentsToCreate = [](int nbItems)
+        {
+            ClusterColors colors;
+            for (int id = 0; id < nbItems; ++id)
+                colors.append(id, Qt::red);
+            ItemPalette palette(ItemPalette::CLUSTER, Qt::black);
+            QSignalSpy adjustments(&palette, &ItemPalette::paletteResized);
+            palette.createItemList(&colors, GROUP, 0);
+            QCoreApplication::processEvents();
+            return adjustments.count();
+        };
+        QCOMPARE(adjustmentsToCreate(3), adjustmentsToCreate(1));
+    }
+
     void longListsScroll()
     {
         QList<int> ids(1250);

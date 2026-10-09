@@ -48,6 +48,9 @@ ItemPalette::ItemPalette(PaletteType type, const QColor& backgroundColor, QWidge
 {
     setObjectName(name);
     setWidgetResizable(true);
+    adjustSizeTimer.setSingleShot(true);
+    adjustSizeTimer.setInterval(0);
+    connect(&adjustSizeTimer, &QTimer::timeout, this, [this]() { emit paletteResized(viewport()->width(), labelSize); });
 
     setAutoFillBackground(true);
     //Set the palette color
@@ -925,7 +928,7 @@ void ItemPalette::createGroup(const QString& id)
 
 void ItemPalette::slotRowInsered()
 {
-    emit paletteResized(viewport()->width(), labelSize);
+    adjustSizeTimer.start();
 }
 
 void ItemPalette::removeGroup(const QString& groupName)

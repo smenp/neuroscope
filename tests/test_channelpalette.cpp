@@ -356,11 +356,29 @@ class TestChannelPalette : public QObject
         QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
 
         select(palettes->display, groups[1].mid(1));
+        // Nothing guarantees that the palette is repainted after the move: rule out that a repaint adjusts the groups.
+        palettes->window.hide();
         palettes->display->createGroup();
+        QCoreApplication::processEvents();
         verifyConsistent();
         QVERIFY(lastItemBottom(source) < sourceBottom);
-        // Nothing guarantees a repaint of the palette will follow, so the groups must already fit.
         QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
+    }
+
+    void groupsAreAdjustedOncePerMove()
+    {
+        palettes->window.hide();
+        QSignalSpy adjustments(palettes->display, &ChannelPalette::paletteResized);
+        const auto adjustmentsToMove = [&](const QList<int>& channels)
+        {
+            select(palettes->display, channels);
+            adjustments.clear();
+            palettes->display->createGroup();
+            QCoreApplication::processEvents();
+            return adjustments.count();
+        };
+        QCOMPARE(adjustmentsToMove({ 0, 1, 2 }), adjustmentsToMove({ 4 }));
+        verifyConsistent();
     }
 
     void wheelOverGroupScrollsPalette()
