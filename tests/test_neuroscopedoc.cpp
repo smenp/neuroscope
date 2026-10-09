@@ -19,6 +19,7 @@
 #include "tracewidget.h"
 
 #include <QLineEdit>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -117,6 +118,20 @@ class TestNeuroscopeDoc : public QObject
         QTest::keyClick(durationEdit, Qt::Key_Return);
 
         QCOMPARE(app->activeView()->getTimeWindow(), duration);
+    }
+
+    // The file dialogs open next in the directory of the last file opened.
+    void rememberTheDirectoryOfTheLastFile()
+    {
+        const QDir recordingDir(dir.path());
+        const QString datPath = writeRecording(recordingDir, "directory", NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
+        const QString eventPath = recordingDir.filePath("directory.abc.evt");
+        writeTextFile(eventPath, "10\tstim\n");
+        auto app = testutils::openRecording(datPath);
+
+        loadFile(app.get(), "slotLoadEventFiles", eventPath);
+
+        QCOMPARE(QSettings().value("CurrentDirectory").toString(), recordingDir.absolutePath());
     }
 };
 

@@ -1419,8 +1419,7 @@ void NeuroscopeApp::slotFileOpen()
         tr("Data File (*.dat *.lfp *.eeg *.fil);;Blackrock File (*.ns1 *.ns2 *.ns3 *.ns4 *.ns5 *.ns6);;All files (*.*)"));
     if (!url.isEmpty())
     {
-        QDir CurrentDir;
-        settings.setValue("CurrentDirectory", CurrentDir.absoluteFilePath(url));
+        settings.setValue("CurrentDirectory", QFileInfo(url).absolutePath());
         openDocumentFile(url);
     }
 
@@ -1468,8 +1467,7 @@ void NeuroscopeApp::slotLoadClusterFiles()
                                                            tr("Cluster File (*.clu.*);;Blackrock File (*.nev);;All files (*.*)"));
     if (!urls.isEmpty())
     {
-        QDir CurrentDir;
-        settings.setValue("CurrentDirectory", CurrentDir.absoluteFilePath(urls.first()));
+        settings.setValue("CurrentDirectory", QFileInfo(urls.first()).absolutePath());
         loadClusterFiles(urls);
     }
 
@@ -1489,8 +1487,7 @@ void NeuroscopeApp::slotLoadEventFiles()
         tr("Event File (*.evt*);;Blackrock File (*.nev);;All files (*.*)"));
     if (!urls.isEmpty())
     {
-        QDir CurrentDir;
-        settings.setValue("CurrentDirectory", CurrentDir.absoluteFilePath(urls.first()));
+        settings.setValue("CurrentDirectory", QFileInfo(urls.first()).absolutePath());
         loadEventFiles(urls);
     }
 
@@ -1506,8 +1503,7 @@ void NeuroscopeApp::slotLoadPositionFile()
                                                tr("All Files (*.*)"));
     if (!url.isEmpty())
     {
-        QDir CurrentDir;
-        settings.setValue("CurrentDirectory", CurrentDir.absoluteFilePath(url));
+        settings.setValue("CurrentDirectory", QFileInfo(url).absolutePath());
         loadPositionFile(url);
     }
 
