@@ -17,6 +17,7 @@
 #include "clustercolors.h"
 #include "itemiconview.h"
 #include "itempalette.h"
+#include "widgettestutils.h"
 
 #include <QScrollBar>
 #include <QtTest>
@@ -101,6 +102,22 @@ class TestItemPalette : public QObject
         QVERIFY(view->visualItemRect(view->item(view->count() - 1)).bottom() < view->height());
         QTRY_VERIFY(p.palette.verticalScrollBar()->isVisible());
         QVERIFY(p.palette.verticalScrollBar()->maximum() + p.palette.viewport()->height() >= p.palette.widget()->height());
+    }
+
+    void wheelOverItemsScrollsPalette()
+    {
+#ifndef WIDGETTESTUTILS_WHEEL
+        QSKIP("QTest cannot send wheel events with this version of Qt");
+#else
+        QList<int> ids(100);
+        std::iota(ids.begin(), ids.end(), 0);
+        Palette p(ids, QSize(300, 100));
+        ItemIconView* view = p.view();
+        QTRY_VERIFY(p.palette.verticalScrollBar()->maximum() > 0);
+        if (!widgettestutils::scrollWheelDown(view))
+            QSKIP("The platform does not deliver wheel events to the window");
+        QVERIFY(p.palette.verticalScrollBar()->value() > 0);
+#endif
     }
 };
 

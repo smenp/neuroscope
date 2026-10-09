@@ -148,7 +148,8 @@ void ChannelIconView::setDragAndDrop(bool dragDrop)
 
 void ChannelIconView::wheelEvent(QWheelEvent* event)
 {
-    event->accept();
+    // The view is as tall as its items and never scrolls: leave the event to the scroll area of the palette.
+    event->ignore();
 }
 
 bool ChannelIconView::dropMimeData(int index, const QMimeData* mimeData, Qt::DropAction action)

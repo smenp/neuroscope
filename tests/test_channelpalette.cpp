@@ -18,9 +18,11 @@
 #include "channelcolors.h"
 #include "channeliconview.h"
 #include "channelpalette.h"
+#include "widgettestutils.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
+#include <QScrollBar>
 #include <QThread>
 #include <QTimer>
 #include <QtTest>
@@ -359,6 +361,21 @@ class TestChannelPalette : public QObject
         QVERIFY(lastItemBottom(source) < sourceBottom);
         // Nothing guarantees a repaint of the palette will follow, so the groups must already fit.
         QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
+    }
+
+    void wheelOverGroupScrollsPalette()
+    {
+#ifndef WIDGETTESTUTILS_WHEEL
+        QSKIP("QTest cannot send wheel events with this version of Qt");
+#else
+        ChannelIconView* view = group(palettes->display, 1);
+        // Shorter than the groups, so that the palette scrolls.
+        palettes->window.resize(palettes->window.width(), view->parentWidget()->height());
+        QTRY_VERIFY(palettes->display->verticalScrollBar()->maximum() > 0);
+        if (!widgettestutils::scrollWheelDown(view))
+            QSKIP("The platform does not deliver wheel events to the window");
+        QVERIFY(palettes->display->verticalScrollBar()->value() > 0);
+#endif
     }
 
     void shiftClickSelectsRange()

@@ -101,7 +101,6 @@ class ChannelIconView : public QListWidget
 
   protected:
     void keyPressEvent(QKeyEvent* event) override;
-    void contentsWheelEvent(QWheelEvent* event) { event->accept(); }
     void mousePressEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* e) override;
     QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override;

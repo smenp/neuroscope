@@ -94,7 +94,8 @@ ItemIconView::ItemIconView(const QColor& backgroundColor, QListView::ViewMode mo
 
 void ItemIconView::wheelEvent(QWheelEvent* event)
 {
-    event->accept();
+    // The view is as tall as its items and never scrolls: leave the event to the scroll area of the palette.
+    event->ignore();
 }
 
 void ItemIconView::mousePressEvent(QMouseEvent* event)
