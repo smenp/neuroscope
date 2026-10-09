@@ -23,9 +23,13 @@
 #include "neuroscope.h"
 #include "neuroscopedoc.h"
 
+#include <QApplication>
 #include <QDir>
+#include <QFileDialog>
 #include <QSettings>
+#include <QTabWidget>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include <cstdint>
 #include <memory>
@@ -98,6 +102,44 @@ inline std::unique_ptr<NeuroscopeApp> openRecording(const QString& datPath)
     app->show();
     app->openDocumentFile(datPath);
     return app;
+}
+
+/** Selects @p path in the next file dialog and accepts it. */
+inline void answerFileDialog(const QString& path)
+{
+    QTimer::singleShot(0, [path]
+                       {
+        QFileDialog* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        if (!dialog)
+            qFatal("No file dialog to answer with %s", qPrintable(path));
+        dialog->setDirectory(QFileInfo(path).absolutePath());
+        dialog->selectFile(QFileInfo(path).fileName());
+        QMetaObject::invokeMethod(dialog, "accept"); });
+}
+
+/** Calls @p loadSlot of @p app, which asks for files, and answers with @p path. */
+inline void loadFile(NeuroscopeApp* app, const char* loadSlot, const QString& path)
+{
+    answerFileDialog(path);
+    QMetaObject::invokeMethod(app, loadSlot);
+}
+
+/**
+ * Shows the palette named @p paletteName and calls @p closeSlot of @p app, as the Close File actions do for the
+ * file selected in the shown palette. Returns false if there is no such palette.
+ */
+inline bool closeFileOfPalette(NeuroscopeApp* app, const char* paletteName, const char* closeSlot)
+{
+    QWidget* palette = app->findChild<QWidget*>(paletteName);
+    if (!palette)
+        return false;
+    // The palettes are the pages of the stacked widget of the palette tabs.
+    QTabWidget* paletteTabs = qobject_cast<QTabWidget*>(palette->parentWidget()->parentWidget());
+    if (!paletteTabs)
+        return false;
+    paletteTabs->setCurrentWidget(palette);
+    QMetaObject::invokeMethod(app, closeSlot);
+    return true;
 }
 
 } // namespace testutils
