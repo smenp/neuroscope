@@ -41,7 +41,7 @@ void writeClusterFiles(const QString& cluPath, const QString& resPath, const QLi
 {
     QString clu = QString::number(nbClusters) + "\n";
     QString res;
-    for (const Spike& spike : spikes)
+    for (const Spike& spike: spikes)
     {
         clu += QString::number(spike.cluster) + "\n";
         res += QString::number(spike.time) + "\n";
@@ -84,7 +84,7 @@ Result requestNext(ClustersProvider& provider, std::int64_t startTime, std::int6
     auto connection = QObject::connect(&provider, &ClustersProvider::nextClusterDataReady,
                                        [&](Array<dataType>& data, QObject*, QString name, long startingTime, long startingTimeInRecordingUnits)
                                        {
-                                           result = {toMatrix(data), name, startingTime, startingTimeInRecordingUnits};
+                                           result = { toMatrix(data), name, startingTime, startingTimeInRecordingUnits };
                                            ++emitted;
                                        });
     provider.requestNextClusterData(static_cast<long>(startTime), static_cast<long>(timeFrame), selectedIds, nullptr,
@@ -103,7 +103,7 @@ Result requestPrevious(ClustersProvider& provider, std::int64_t startTime, std::
     auto connection = QObject::connect(&provider, &ClustersProvider::previousClusterDataReady,
                                        [&](Array<dataType>& data, QObject*, QString name, long startingTime, long startingTimeInRecordingUnits)
                                        {
-                                           result = {toMatrix(data), name, startingTime, startingTimeInRecordingUnits};
+                                           result = { toMatrix(data), name, startingTime, startingTimeInRecordingUnits };
                                            ++emitted;
                                        });
     provider.requestPreviousClusterData(static_cast<long>(startTime), static_cast<long>(timeFrame), selectedIds, nullptr,
@@ -130,7 +130,7 @@ Matrix expectedWindow(const QList<Spike>& spikes, std::int64_t startTime, std::i
 
     QVector<std::int64_t> times;
     QVector<std::int64_t> ids;
-    for (const Spike& spike : spikes)
+    for (const Spike& spike: spikes)
     {
         if (spike.time < start || spike.time > end)
             continue;
@@ -165,7 +165,7 @@ class TestClustersProvider : public QObject
 
     // A few spikes for the browsing tests (times in samples at 20 kHz):
     // 100 ms, 200 ms, 500 ms, 1500 ms and 3000 ms.
-    const QList<Spike> fewSpikes = {{2000, 2}, {4000, 3}, {10000, 2}, {30000, 3}, {60000, 2}};
+    const QList<Spike> fewSpikes = { { 2000, 2 }, { 4000, 3 }, { 10000, 2 }, { 30000, 3 }, { 60000, 2 } };
 
     QString path(const QString& name) const { return dir.filePath(name); }
 
@@ -176,11 +176,11 @@ class TestClustersProvider : public QObject
 
         // More than 1000 spikes, so that the bisection in the window search is used.
         QRandomGenerator random(42);
-        const QList<int> clusters = {0, 1, 2, 5};
+        const QList<int> clusters = { 0, 1, 2, 5 };
         std::int64_t time = 100;
         for (int i = 0; i < 5000; ++i)
         {
-            manySpikes.append({time, clusters[random.bounded(clusters.size())]});
+            manySpikes.append({ time, clusters[random.bounded(clusters.size())] });
             time += 1 + random.bounded(400);
         }
         writeClusterFiles(path("many.clu.1"), path("many.res.1"), manySpikes, 4);
@@ -208,7 +208,7 @@ class TestClustersProvider : public QObject
     {
         ClustersProvider provider(path("many.clu.1"), SAMPLING_RATE, SAMPLING_RATE, 0);
         QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
-        QCOMPARE(provider.clusterIdList(), QList<int>({0, 1, 2, 5}));
+        QCOMPARE(provider.clusterIdList(), QList<int>({ 0, 1, 2, 5 }));
     }
 
     void loadErrors()
@@ -293,7 +293,10 @@ class TestClustersProvider : public QObject
             const Matrix expected = expectedWindow(manySpikes, startTime, endTime, currentSamplingRate);
             if (describe(data) != describe(expected))
                 QFAIL(qPrintable(QString("request %1: window %2-%3 ms\nactual:   %4\nexpected: %5")
-                                     .arg(i).arg(startTime).arg(endTime).arg(describe(data), describe(expected))));
+                                     .arg(i)
+                                     .arg(startTime)
+                                     .arg(endTime)
+                                     .arg(describe(data), describe(expected))));
             if (startTime > fileMaxTime)
                 startTime = 0;
         }
@@ -306,14 +309,14 @@ class TestClustersProvider : public QObject
         QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
 
         // The next spike of cluster 3 after 250 ms is at 1500 ms: the window starts at 1250 ms.
-        const Result next = requestNext(provider, 0, 1000, {3}, 0);
+        const Result next = requestNext(provider, 0, 1000, { 3 }, 0);
         QCOMPARE(next.name, QString("2"));
         QCOMPARE(next.startingTime, 1250_i64);
         QCOMPARE(next.startingTimeInRecordingUnits, 25000_i64);
         QCOMPARE(describe(next.data), QString("(5000, 3)"));
 
         // The previous spike of cluster 3 is at 200 ms; the window cannot start before 0.
-        const Result previous = requestPrevious(provider, next.startingTime, 1000, {3}, next.startingTimeInRecordingUnits);
+        const Result previous = requestPrevious(provider, next.startingTime, 1000, { 3 }, next.startingTimeInRecordingUnits);
         QCOMPARE(previous.startingTime, 0_i64);
         QCOMPARE(previous.startingTimeInRecordingUnits, 0_i64);
         QCOMPARE(describe(previous.data), QString("(2000, 2) (4000, 3) (10000, 2)"));
@@ -325,10 +328,36 @@ class TestClustersProvider : public QObject
         QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
 
         // No spike of cluster 7: the start time is returned unchanged with no data.
-        const Result next = requestNext(provider, 500, 1000, {7}, 10000);
+        const Result next = requestNext(provider, 500, 1000, { 7 }, 10000);
         QVERIFY(next.data.isEmpty());
         QCOMPARE(next.startingTime, 500_i64);
         QCOMPARE(next.startingTimeInRecordingUnits, 10000_i64);
+    }
+
+    // The search for the next or previous spike starts where the window last read ended.
+    void browseFromTheEndOfTheLastWindow()
+    {
+        ClustersProvider provider(path("few.clu.2"), SAMPLING_RATE, SAMPLING_RATE, 100000, 25);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
+
+        // The spike of cluster 3 at 200 ms is before the browse point at 250 ms; the next one is at 1500 ms.
+        request(provider, 0, 250);
+        const Result next = requestNext(provider, 0, 1000, { 3 }, 0);
+        QCOMPARE(next.startingTime, 1250_i64);
+
+        // The spike of cluster 2 at 3000 ms is after the browse point at 2750 ms; the previous one is at 500 ms.
+        request(provider, 2500, 2750);
+        const Result previous = requestPrevious(provider, 2500, 1000, { 2 }, 0);
+        QCOMPARE(previous.startingTime, 250_i64);
+
+        // Spikes at 100 ms and 3000 ms: the previous spike before 2750 ms is at 100 ms.
+        writeClusterFiles(path("sparse.clu.3"), path("sparse.res.3"), { { 2000, 2 }, { 60000, 2 } }, 1);
+        ClustersProvider sparse(path("sparse.clu.3"), SAMPLING_RATE, SAMPLING_RATE, 100000, 25);
+        QCOMPARE(sparse.loadData(), int(ClustersProvider::OK));
+        request(sparse, 2500, 2750);
+        const Result sparsePrevious = requestPrevious(sparse, 2500, 1000, { 2 }, 0);
+        QCOMPARE(sparsePrevious.startingTime, 0_i64);
+        QCOMPARE(describe(sparsePrevious.data), QString("(2000, 2)"));
     }
 };
 

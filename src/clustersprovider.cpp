@@ -608,7 +608,7 @@ void ClustersProvider::requestNextClusterData(long startTime, long timeFrame, co
             startIndex = previousStartIndex;
         else if (startTime == previousEndTime)
         {
-            if (clusters(2, previousEndIndex) < startTime)
+            if (clusters(2, previousEndIndex) < startInRecordingUnits)
             {
                 startIndex = previousEndIndex + 1;
                 if (startIndex > nbSpikes)
@@ -906,16 +906,8 @@ void ClustersProvider::requestPreviousClusterData(long startTime, long timeFrame
         if (startTime == previousStartTime)
             startIndex = previousStartIndex;
         else if (startTime == previousEndTime)
-        {
-            if (clusters(2, previousEndIndex) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbSpikes)
-                    startIndex = nbSpikes;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
+            //The last spike read up to previousEndTime, which is the last one not after startTime.
+            startIndex = previousEndIndex;
     }
 
 
