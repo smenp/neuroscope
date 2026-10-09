@@ -169,6 +169,19 @@ void dragOnto(ChannelPalette* palette, int byChannel, int ontoChannel)
     QCoreApplication::processEvents();
 }
 
+int lastItemBottom(ChannelIconView* view)
+{
+    return view->visualItemRect(view->item(view->count() - 1)).bottom();
+}
+
+/** Height of a group box below the bottom of its last channel. */
+int spaceBelowChannels(ChannelPalette* palette, int id)
+{
+    ChannelIconView* view = group(palette, id);
+    QWidget* box = view->parentWidget();
+    return box->height() - view->viewport()->mapTo(box, QPoint(0, lastItemBottom(view))).y();
+}
+
 } // namespace
 
 class TestChannelPalette : public QObject
@@ -291,6 +304,30 @@ class TestChannelPalette : public QObject
 
         verifyConsistent();
         QCOMPARE(shown(palettes->display, 0), trash);
+    }
+
+    void groupsShrinkWhenChannelsLeave()
+    {
+        ChannelIconView* view = group(palettes->display, 1);
+        const int perRow = view->viewport()->width() / view->gridSize().width();
+        // Groups several rows high, so that moving channels out of one removes rows.
+        const int perGroup = 4 * perRow;
+        QMap<int, QList<int>> groups;
+        for (int channel = 0; channel < 2 * perGroup + 2; ++channel)
+            groups[channel < 2 * perGroup ? channel / perGroup + 1 : 0] << channel;
+        showPalettes(groups);
+        ChannelIconView* source = group(palettes->display, 1);
+        const int sourceBottom = lastItemBottom(source);
+        QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
+
+        select(palettes->display, groups[1].mid(1));
+        // Nothing guarantees that the palette is repainted after the move: rule out that a repaint adjusts the groups.
+        palettes->window.hide();
+        palettes->display->createGroup();
+        QCoreApplication::processEvents();
+        verifyConsistent();
+        QVERIFY(lastItemBottom(source) < sourceBottom);
+        QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
     }
 };
 

@@ -96,6 +96,7 @@ class ChannelIconView : public QListWidget
 
     void removeGroup(const QString& name);
     void moveListItem(const QList<int>& listId, const QString& sourceGroupName, const QString& destGroupName, int index, bool moveAll);
+    /**Emitted when items are inserted or removed, so the height of the view has to be adjusted.*/
     void rowInsered();
 
   protected:
