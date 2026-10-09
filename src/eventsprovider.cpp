@@ -408,8 +408,8 @@ void EventsProvider::requestNextEventData(long startTime, long timeFrame, const 
 
     if (startTime > fileMaxTime)
     {
-        //Send the information to the receiver.
-        emit dataReady(times, ids, initiator, name);
+        //No event after the last one: return startTime as the startingTime, as when no event is found.
+        emit nextEventDataReady(times, ids, initiator, name, initialStartTime);
         return;
     }
 

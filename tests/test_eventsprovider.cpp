@@ -342,6 +342,22 @@ class TestEventsProvider : public QObject
         QVERIFY(request(provider, 0, 1000).times.isEmpty());
     }
 
+    // Past its last event a file answers the request for the next event with no event, leaving the window where it is.
+    void nextEventAfterTheLastEvent()
+    {
+        EventsProvider provider(path("few.xyz.evt"), 1000.0, 25);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+        const int reward = provider.eventDescriptionIdMap().value(EventDescription("reward"));
+
+        int windowsSent = 0;
+        connect(&provider, &EventsProvider::dataReady, [&](Array<dataType>&, Array<int>&, QObject*, QString)
+                { ++windowsSent; });
+        const Result next = requestNext(provider, 3000, 1000, { reward });
+        QCOMPARE(windowsSent, 0);
+        QVERIFY(next.times.isEmpty());
+        QCOMPARE(next.startingTime, 3000_i64);
+    }
+
     void saveRoundTrip()
     {
         EventsProvider provider(path("many.abc.evt"), 20000.0);

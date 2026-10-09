@@ -86,6 +86,29 @@ class TestBrowsing : public QObject
         return app;
     }
 
+    /** Opens a recording with the given event files loaded, their events (all "stim") shown and browsed. */
+    std::unique_ptr<NeuroscopeApp> openWithEvents(const QString& baseName, const QList<QList<double>>& files)
+    {
+        const QDir recordingDir(dir.path());
+        auto app = openRecording(writeRecording(recordingDir, baseName, NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES));
+        for (int file = 0; file < files.size(); ++file)
+        {
+            const QString id = QString("ev%1").arg(file);
+            QString content;
+            for (double time: files[file])
+                content += QString::number(time) + "\tstim\n";
+            const QString eventPath = recordingDir.filePath(QString("%1.%2.evt").arg(baseName, id));
+            writeTextFile(eventPath, content);
+            loadFile(app.get(), "slotLoadEventFiles", eventPath);
+            if (files[file].isEmpty())
+                continue;
+            // The only description has the id 1.
+            app->activeView()->shownEventsUpdate(id, { 1 });
+            app->activeView()->updateNoneBrowsingEventList(id, {});
+        }
+        return app;
+    }
+
     static void showWindow(NeuroscopeApp* app, long start, long duration)
     {
         QMetaObject::invokeMethod(app->findChild<TraceWidget*>(), "slotSetStartAndDuration", Q_ARG(long, start), Q_ARG(long, duration));
@@ -143,6 +166,45 @@ class TestBrowsing : public QObject
         QMetaObject::invokeMethod(app.get(), "slotShowNextCluster");
 
         // Next Spike looks after 25 % of the window, from 200 ms, and shows the spike at 260 ms at 25 % of the window.
+        QCOMPARE(app->activeView()->getStartTime(), 160L);
+    }
+
+    // Next Event past the last event of the only event file leaves the shown window and its events as they are.
+    void nextEventAfterTheLastEvent()
+    {
+        auto app = openWithEvents("lastevent", { { 150, 160 } });
+        showWindow(app.get(), 100, 400);
+        TraceView* view = app->findChild<TraceView*>();
+        const QImage before = view->grab().toImage();
+
+        QMetaObject::invokeMethod(app.get(), "slotShowNextEvent");
+
+        QCOMPARE(app->activeView()->getStartTime(), 100L);
+        QCOMPARE(view->grab().toImage(), before);
+    }
+
+    // Next Event goes to the earliest next event of all event files, also when one of them has none. Each file has an
+    // event in every window shown, so that no window read comes back empty. The trace view asks the files in the
+    // iteration order of a hash, which varies between runs, so the file without a next event is loaded first and second.
+    void nextEventAcrossEventFiles_data()
+    {
+        QTest::addColumn<bool>("otherFirst");
+
+        QTest::newRow("loaded first") << true;
+        QTest::newRow("loaded second") << false;
+    }
+
+    void nextEventAcrossEventFiles()
+    {
+        QFETCH(bool, otherFirst);
+        QList<QList<double>> files = { { 150, 260 } };
+        files.insert(otherFirst ? 0 : 1, { 180 });
+        auto app = openWithEvents(QString("acrossevents-%1").arg(QTest::currentDataTag()).replace(' ', '-'), files);
+        showWindow(app.get(), 100, 400);
+
+        QMetaObject::invokeMethod(app.get(), "slotShowNextEvent");
+
+        // Next Event looks after 25 % of the window, from 200 ms, and shows the event at 260 ms at 25 % of the window.
         QCOMPARE(app->activeView()->getStartTime(), 160L);
     }
 };
