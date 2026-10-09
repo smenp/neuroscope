@@ -20,6 +20,7 @@
 #include "traceview.h"
 
 #include <QAction>
+#include <QMouseEvent>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -47,7 +48,7 @@ class TestEvents : public QObject
     {
         const QString datPath = writeRecording(QDir(dir.path()), baseName, NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
         const QString eventPath = dir.filePath(baseName + ".abc.evt");
-        writeTextFile(eventPath, "100\t" + DESCRIPTION + "\n500\t" + DESCRIPTION + "\n");
+        writeTextFile(eventPath, "5\t" + DESCRIPTION + "\n500\t" + DESCRIPTION + "\n");
         auto app = openRecording(datPath);
         loadFile(app.get(), "slotLoadEventFiles", eventPath);
         return app;
@@ -132,6 +133,45 @@ class TestEvents : public QObject
         displayTabs->setCurrentWidget(adding);
         QCOMPARE(app->activeView(), adding);
         clickInTheTraces(app.get());
+    }
+
+    // An event stays selected while its file is closed; removing or dragging it must not reach the closed file.
+    void editASelectedEventAfterItsFileIsClosed_data()
+    {
+        QTest::addColumn<bool>("drag");
+        QTest::newRow("remove") << false;
+        QTest::newRow("drag") << true;
+    }
+
+    void editASelectedEventAfterItsFileIsClosed()
+    {
+        QFETCH(bool, drag);
+        auto app = openWithEvents(QString("selected-") + QTest::currentDataTag());
+        const QString otherEventPath = dir.filePath(QString("selected-%1.def.evt").arg(QTest::currentDataTag()));
+        writeTextFile(otherEventPath, "900\t" + DESCRIPTION + "\n");
+        loadFile(app.get(), "slotLoadEventFiles", otherEventPath);
+        // Show the events of the first file, which are numbered from 1 in the order of their descriptions.
+        app->activeView()->shownEventsUpdate("abc", { 1 });
+        QMetaObject::invokeMethod(app.get(), "slotSelectEvent");
+        clickInTheTraces(app.get());
+
+        QMetaObject::invokeMethod(app.get(), "slotEventGroupSelected", Q_ARG(QString, "abc"));
+        QVERIFY(closeFileOfPalette(app.get(), "eventPanel", "slotCloseEventFile"));
+
+        if (drag)
+        {
+            TraceView* view = app->findChild<TraceView*>();
+            const QPoint from = view->rect().center();
+            const QPoint to = from + QPoint(10, 0);
+            QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, from);
+            QMouseEvent move(QEvent::MouseMove, to, view->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view, &move);
+            QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, to);
+        }
+        else
+        {
+            QMetaObject::invokeMethod(app.get(), "removeEvent");
+        }
     }
 };
 
