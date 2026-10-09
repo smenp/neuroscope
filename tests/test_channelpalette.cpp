@@ -267,6 +267,31 @@ class TestChannelPalette : public QObject
         QVERIFY(shown(palette, target) != targetBefore);
         QCOMPARE(otherGroups, otherGroupsBefore);
     }
+
+    void trashStaysInStep_data()
+    {
+        QTest::addColumn<QList<int>>("channels");
+        QTest::addColumn<int>("onto");
+        QTest::addColumn<QList<int>>("trash");
+        // The trash holds 8 and 9.
+        QTest::newRow("drag to the front") << QList<int>{ 2 } << 8 << QList<int>{ 2, 8, 9 };
+        QTest::newRow("drag several between") << QList<int>{ 0, 1 } << 9 << QList<int>{ 8, 0, 1, 9 };
+        QTest::newRow("drag out") << QList<int>{ 9 } << 0 << QList<int>{ 8 };
+    }
+
+    // The trash of both palettes holds the same channels in the same order.
+    void trashStaysInStep()
+    {
+        QFETCH(QList<int>, channels);
+        QFETCH(int, onto);
+        QFETCH(QList<int>, trash);
+        select(palettes->display, channels);
+
+        dragOnto(palettes->display, channels.first(), onto);
+
+        verifyConsistent();
+        QCOMPARE(shown(palettes->display, 0), trash);
+    }
 };
 
 QTEST_MAIN(TestChannelPalette)
