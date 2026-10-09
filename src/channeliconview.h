@@ -74,7 +74,7 @@ class ChannelIconView : public QListWidget
 
     void setNewWidth(int width);
 
-    QSize sizeHint() const;
+    QSize sizeHint() const override;
 
   public Q_SLOTS:
     void setDragAndDrop(bool dragDrop);
@@ -91,23 +91,23 @@ class ChannelIconView : public QListWidget
     void rowInsered();
 
   protected:
-    void keyPressEvent(QKeyEvent* event);
+    void keyPressEvent(QKeyEvent* event) override;
     void contentsWheelEvent(QWheelEvent* event) { event->accept(); }
-    void mousePressEvent(QMouseEvent* event);
-    void wheelEvent(QWheelEvent* e);
-    QMimeData* mimeData(const QList<QListWidgetItem*> items) const;
-    bool dropMimeData(int index, const QMimeData* data, Qt::DropAction action);
-    Qt::DropActions supportedDropActions() const
+    void mousePressEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* e) override;
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override;
+    bool dropMimeData(int index, const QMimeData* data, Qt::DropAction action) override;
+    Qt::DropActions supportedDropActions() const override
     {
         return Qt::MoveAction;
     }
-    QStringList mimeTypes() const
+    QStringList mimeTypes() const override
     {
         return QStringList() << "application/x-channeliconview";
     }
     // Skip internal dnd handling in QListWidget ---- how is one supposed to figure this out
     // without reading the QListWidget code !?
-    virtual void dropEvent(QDropEvent* ev)
+    void dropEvent(QDropEvent* ev) override
     {
         QAbstractItemView::dropEvent(ev);
     }

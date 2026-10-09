@@ -105,18 +105,18 @@ void ChannelIconView::slotRowInsered()
     resize(sizeHint());
 }
 
-QMimeData* ChannelIconView::mimeData(const QList<QListWidgetItem*> items) const
+QMimeData* ChannelIconView::mimeData(const QList<QListWidgetItem*>& items) const
 {
     if (items.isEmpty())
         return 0;
     QMimeData* mimedata = new QMimeData();
 
+    // The drop target only needs the channel ids: the palette rebuilds the items itself.
     QByteArray data;
-    //For the moment just one item
     QDataStream stream(&data, QIODevice::WriteOnly);
     for (QListWidgetItem* item : items)
     {
-        stream << *static_cast<ChannelIconViewItem*>(item);
+        stream << static_cast<ChannelIconViewItem*>(item)->getID();
     }
 
     mimedata->setData("application/x-channeliconview", data);
@@ -173,20 +173,22 @@ bool ChannelIconView::dropMimeData(int index, const QMimeData* mimeData, Qt::Dro
     const QString sourceGroupName = QString::fromUtf8(mimeData->data("application/x-channeliconview-name"));
     const bool moveAllGroup = (mimeData->data("application/x-channeliconview-move-all-channels") == "true");
 
+    QList<int> channelIds;
+    for (int i = 0; i < numberOfItems; ++i)
+    {
+        int id;
+        stream >> id;
+        channelIds.append(id);
+    }
+
+    // Accepting the drop ends the drag with Qt::MoveAction, upon which QListView deletes the items
+    // still selected in the source view. Only accept drops the palette acts on.
+    if (channelIds.isEmpty())
+        return false;
+
     if (sourceGroupName != objectName())
     {
-        //TODO this part is buggy
-        QList<int> channelIds;
-        for (int i = 0; i < numberOfItems; ++i)
-        {
-            ChannelIconViewItem sentItem(this);
-            stream >> sentItem;
-            channelIds.append(sentItem.getID());
-        }
-        if (!channelIds.isEmpty())
-        {
-            emit moveListItem(channelIds, sourceGroupName, objectName(), index, moveAllGroup);
-        }
+        emit moveListItem(channelIds, sourceGroupName, objectName(), index, moveAllGroup);
     }
     else
     {
@@ -195,14 +197,6 @@ bool ChannelIconView::dropMimeData(int index, const QMimeData* mimeData, Qt::Dro
         {
             //don't move it.
             return false;
-        }
-
-        QList<int> channelIds;
-        for (int i = 0; i < numberOfItems; ++i)
-        {
-            ChannelIconViewItem sentItem(this);
-            stream >> sentItem;
-            channelIds.append(sentItem.getID());
         }
 
         QListWidgetItem* posItem = item(index);
