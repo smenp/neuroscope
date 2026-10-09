@@ -87,6 +87,15 @@ struct Palettes
         }
         // The application forwards channels discarded in the active palette to the other one.
         QObject::connect(display, &ChannelPalette::channelsDiscarded, spike, qOverload<const QList<int>&>(&ChannelPalette::discardChannels));
+        // The application hands the selection of the active palette to the trace view, which hands it back to both
+        // palettes, and then selects the same channels in the other palette.
+        QObject::connect(display, &ChannelPalette::channelsSelected, &window,
+                         [this](const QList<int>& ids)
+                         {
+                             spike->selectChannels(ids);
+                             display->selectChannels(ids);
+                             spike->selectChannels(ids);
+                         });
 
         display->createChannelLists(&colors, &displayGroups, &displayChannels, &labels);
         spike->createChannelLists(&colors, &spikeGroups, &spikeChannels, &labels);
@@ -337,6 +346,20 @@ class TestChannelPalette : public QObject
         QList<int> moved = shown(palettes->display, 3);
         std::sort(moved.begin(), moved.end());
         QCOMPARE(moved, (QList<int>{ 1, 6 }));
+    }
+
+    void moveToNewGroupKeepsSelection()
+    {
+        select(palettes->display, { 1, 2, 3 });
+        palettes->display->createGroup();
+        verifyConsistent();
+        QCOMPARE(shown(palettes->display, 3), (QList<int>{ 1, 2, 3 }));
+        for (ChannelPalette* palette: { palettes->display, palettes->spike })
+        {
+            QList<int> selected = palette->selectedChannels();
+            std::sort(selected.begin(), selected.end());
+            QCOMPARE(selected, (QList<int>{ 1, 2, 3 }));
+        }
     }
 
     void groupsShrinkWhenChannelsLeave()
