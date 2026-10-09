@@ -91,8 +91,8 @@ QList<QListWidgetItem*> ChannelIconView::findItems(const int id) const
 
     for (unsigned int row = 0; row < count(); row++)
     {
-        ChannelIconViewItem* channelItem = static_cast<ChannelIconViewItem*>(item(row));
-        if (channelItem->getID() == id)
+        QListWidgetItem* channelItem = item(row);
+        if (ChannelIconViewItem::id(channelItem) == id)
             matchedItems.append(channelItem);
     }
     return matchedItems;
