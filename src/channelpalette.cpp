@@ -1773,15 +1773,8 @@ void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& s
 
     ChannelIconView* iconView = iconviewDict[sourceGroup];
 
-    //If the items have to be moved before the first item, insert them after the first item
-    //and then move the first item after the others
-    bool moveFirst = false;
-    if (after == 0)
-    {
-        after = iconView->item(0);
-        moveFirst = true;
-    }
-    int afterIndex = iconView->row(after);
+    //The channels are inserted before the item after, or at the front if there is none.
+    int afterIndex = after ? iconView->row(after) : 0;
     for (iterator = channelIds.begin(); iterator != channelIds.end(); ++iterator)
     {
         int channelId = *iterator;
@@ -1799,21 +1792,6 @@ void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& s
             iconView->insertItem(afterIndex, after);
             afterIndex++;
         }
-    }
-    if (moveFirst)
-    {
-        ChannelIconViewItem* first = static_cast<ChannelIconViewItem*>(iconView->item(0));
-        QString label = first->text();
-        int channelId = first->getID();
-        delete first;
-
-        //Add a new item corresponding to the channel Id.
-        QPixmap pixmap(14, 14);
-        QColor color = channelColors->color(channelId);
-        drawItem(painter, &pixmap, color, channelsShowHideStatus[channelId], channelsSkipStatus[channelId]);
-        const int afterIndex = iconView->row(after);
-        after = new ChannelIconViewItem(QIcon(pixmap), label, channelId);
-        iconView->insertItem(afterIndex, after);
     }
     //Modify the entry in the map group-channel list
     QList<int> sourceChannels;
@@ -1986,17 +1964,10 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard)
 
 void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const int afterId, bool beforeFirst)
 {
-    QListWidgetItem* after = 0;
     ChannelIconView* trash = iconviewDict["0"];
-    //If the items have to be moved before the first item, insert them after the first item
-    //and then move the first item after the others
-    bool moveFirst = false;
-    if (beforeFirst)
-    {
-        after = trash->item(0);
-        moveFirst = true;
-    }
-    else
+    //The channels are inserted in order, at the front, after the item afterId, or else at the end.
+    QListWidgetItem* after = 0;
+    if (!beforeFirst)
     {
         QList<QListWidgetItem*> lstItem = trash->findItems(afterId);
         if (!lstItem.isEmpty())
@@ -2004,6 +1975,7 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const 
             after = lstItem.first();
         }
     }
+    int insertRow = beforeFirst ? 0 : (after ? trash->row(after) + 1 : trash->count());
 
     //Get the destination group color to later update the group color of the moved channels, default is blue
     QColor groupColor;
@@ -2037,9 +2009,8 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const 
         channelsShowHideStatus[*channelIterator] = false;
         drawItem(painter, &pixmap, color, false, channelsSkipStatus[*channelIterator]);
 
-        const int index = trash->row(after);
         ChannelIconViewItem* newItem = new ChannelIconViewItem(QIcon(pixmap), channelLabels->at(*channelIterator), *channelIterator);
-        trash->insertItem(index + 1, newItem);
+        trash->insertItem(insertRow++, newItem);
 
 
         //new ChannelIconViewItem(trash,after,QString::number(*channelIterator),pixmap);
@@ -2058,22 +2029,6 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const 
         groupsChannels->insert(groupId, sourceChannels);
 
         //iconView->arrangeItemsInGrid();
-    }
-
-    if (moveFirst)
-    {
-        ChannelIconViewItem* first = static_cast<ChannelIconViewItem*>(trash->item(0));
-        QString label = first->text();
-        int channelId = first->getID();
-        delete first;
-
-        //Add a new item corresponding to the channel Id.
-        QPixmap pixmap(14, 14);
-        QColor color = channelColors->color(channelId);
-        drawItem(painter, &pixmap, color, channelsShowHideStatus[channelId], channelsSkipStatus[channelId]);
-        const int index = trash->row(after);
-        after = new ChannelIconViewItem(QIcon(pixmap), label, channelId);
-        trash->insertItem(index + 1, after);
     }
 
     //Modify the entry in the map group-channel list
@@ -2355,7 +2310,10 @@ void ChannelPalette::trashChannels(int destinationGroup)
         }
     }
 
-    //Add/update the 0 entry in the map group-channel list
+    //Add/update the destination entry in the map group-channel list, in display order
+    trashChannels.clear();
+    for (int i = 0; i < trash->count(); ++i)
+        trashChannels.append(static_cast<ChannelIconViewItem*>(trash->item(i))->getID());
     groupsChannels->insert(destinationGroup, trashChannels);
 
     //Update the group color, for a new group blue is the default
@@ -2392,39 +2350,20 @@ void ChannelPalette::trashChannels(int destinationGroup)
 
 void ChannelPalette::slotMoveListItem(const QList<int>& items, const QString& sourceGroup, const QString& destinationGroup, int index, bool moveAll)
 {
-    int afterId;
-    bool beforeFirst = false;
+    //The channels are inserted before the item at index: inform the other palette of the trash item they follow.
     if (destinationGroup == QLatin1String("0"))
     {
-        if (index == 0)
-        {
-            beforeFirst = true;
-        }
-        else
+        int afterId = -1;
+        const bool beforeFirst = (index == 0);
+        if (!beforeFirst)
         {
             ChannelIconView* trash = iconviewDict["0"];
-            QListWidgetItem* item = trash->item(index);
+            QListWidgetItem* item = trash->item(index - 1);
             if (item)
                 afterId = static_cast<ChannelIconViewItem*>(item)->getID();
         }
 
         emit channelsMovedToTrash(items, afterId, beforeFirst);
-    }
-    else if (sourceGroup == QLatin1String("0"))
-    {
-        if (index == 0)
-        {
-            beforeFirst = true;
-        }
-        else
-        {
-            ChannelIconView* iconView = iconviewDict[destinationGroup];
-            QListWidgetItem* item = iconView->item(index);
-            if (item)
-                afterId = static_cast<ChannelIconViewItem*>(item)->getID();
-        }
-
-        emit channelsMovedAroundInTrash(items, afterId, beforeFirst);
     }
     dragChannels(items, sourceGroup, destinationGroup, index, moveAll);
     //Inform the application that the spike groups have been modified (use to warn the user at the end of the session)

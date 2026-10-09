@@ -258,12 +258,38 @@ class TestChannelPalette : public QObject
         QCOMPARE(shown(palettes->display, 1).size(), 8);
     }
 
+    void dragToFrontOfTrash()
+    {
+        select(palettes->display, { 2 });
+        dragOnto(palettes->display, 2, 8);
+        verifyConsistent();
+        QCOMPARE(shown(palettes->display, 0), (QList<int>{ 2, 8, 9 }));
+    }
+
+    void dragSeveralIntoTrash()
+    {
+        select(palettes->display, { 0, 1 });
+        dragOnto(palettes->display, 0, 9);
+        verifyConsistent();
+        QCOMPARE(shown(palettes->display, 0), (QList<int>{ 8, 0, 1, 9 }));
+    }
+
     void reorderWithinTrash()
     {
         select(palettes->display, { 9 });
         dragOnto(palettes->display, 9, 8);
         verifyConsistent();
         QCOMPARE(shown(palettes->display, 0), (QList<int>{ 9, 8 }));
+    }
+
+    void dragOutOfTrash()
+    {
+        select(palettes->display, { 9 });
+        dragOnto(palettes->display, 9, 0);
+        verifyConsistent();
+        QCOMPARE(shown(palettes->display, 0), (QList<int>{ 8 }));
+        QVERIFY(shown(palettes->display, 1).contains(9));
+        QVERIFY(!shown(palettes->spike, 0).contains(9));
     }
 
     void dragInSpikePalette()
@@ -273,6 +299,16 @@ class TestChannelPalette : public QObject
         verifyConsistent();
         QVERIFY(shown(palettes->spike, 1).contains(4));
         QCOMPARE(shown(palettes->display, 2), (QList<int>{ 4, 5, 6, 7 }));
+    }
+
+    void discardSelection()
+    {
+        select(palettes->display, { 3, 7 });
+        palettes->display->discardChannels();
+        verifyConsistent();
+        QList<int> trash = shown(palettes->display, 0);
+        std::sort(trash.begin(), trash.end());
+        QCOMPARE(trash, (QList<int>{ 3, 7, 8, 9 }));
     }
 
     void moveSelectionToNewGroup()
