@@ -225,6 +225,46 @@ class TestEventsProvider : public QObject
         QVERIFY(request(provider, 0, 1000).times.isEmpty());
     }
 
+    void emptyLinesAreSkipped()
+    {
+        writeTextFile(path("blank.bla.evt"), "\n10 first\n\n \t\n20 second\n\n");
+        EventsProvider provider(path("blank.bla.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+        QCOMPARE(provider.getNbEvents(), 2);
+        QCOMPARE(provider.eventIdDescriptionMap().values(), QList<EventDescription>({QString("first"), QString("second")}));
+    }
+
+    void timeWithoutDescription()
+    {
+        writeTextFile(path("nodescription.nod.evt"), "10\n");
+        EventsProvider provider(path("nodescription.nod.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+        QCOMPARE(provider.getNbEvents(), 1);
+        QCOMPARE(provider.eventIdDescriptionMap().value(1), EventDescription());
+    }
+
+    void incorrectContent_data()
+    {
+        QTest::addColumn<QString>("content");
+
+        QTest::newRow("time not a number") << "10 first\nten second\n";
+        QTest::newRow("time out of range") << "10 first\n1e300 second\n";
+    }
+
+    void incorrectContent()
+    {
+        QFETCH(QString, content);
+        writeTextFile(path("incorrect.inc.evt"), content);
+        EventsProvider provider(path("incorrect.inc.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::INCORRECT_CONTENT));
+    }
+
+    void missingFile()
+    {
+        EventsProvider provider(path("missing.mis.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OPEN_ERROR));
+    }
+
     void readWindow_data()
     {
         QTest::addColumn<std::int64_t>("startTime");

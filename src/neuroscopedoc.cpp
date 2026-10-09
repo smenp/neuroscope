@@ -2818,11 +2818,6 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadEventFile(const QS
         delete eventsProvider;
         return OPEN_ERROR;
     }
-    else if (returnStatus == EventsProvider::COUNT_ERROR)
-    {
-        delete eventsProvider;
-        return CREATION_ERROR;
-    }
     else if (returnStatus == EventsProvider::INCORRECT_CONTENT)
     {
         delete eventsProvider;
@@ -2920,14 +2915,6 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadEventFileForSessio
         QMessageBox::critical(0, tr("Error!"), tr("Could not load the file %1").arg(eventUrl));
         QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
         return OPEN_ERROR;
-    }
-    else if (returnStatus == EventsProvider::COUNT_ERROR)
-    {
-        delete eventsProvider;
-        QApplication::restoreOverrideCursor();
-        QMessageBox::critical(0, tr("Error!"), tr("The number of events of the requested file %1 could not be determined. Therefore this file will not be loaded.").arg(eventUrl));
-        QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
-        return CREATION_ERROR;
     }
     else if (returnStatus == EventsProvider::INCORRECT_CONTENT)
     {

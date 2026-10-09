@@ -21,12 +21,13 @@
 
 #include <QTextStream>
 #include <QList>
+#include <QVector>
 #include <QDebug>
 
 //include files for the application
 #include "eventsprovider.h"
+#include "textvalues.h"
 #include "timer.h"
-#include "utilities.h"
 
 
 EventsProvider::EventsProvider(const QString& fileUrl, double currentSamplingRate, int position)
@@ -61,70 +62,56 @@ int EventsProvider::loadData()
 {
     RestartTimer();
 
-    //Get the number of events
-    nbEvents = Utilities::getNbLines(fileName);
-
-    //qDebug()<<"nbEvents "<<nbEvents<<"\n";
-
-    if (nbEvents == -1)
-    {
-        events.setSize(0, 0);
-        timeStamps.setSize(0, 0);
-        return COUNT_ERROR;
-    }
-
-    if (nbEvents == 0)
-    {
-        initializeEmptyProvider();
-        return OK;
-    }
-
     //Create a reader on the eventFile
     QFile eventFile(fileName);
-    bool status = eventFile.open(QIODevice::ReadOnly);
-    if (!status)
+    if (!eventFile.open(QIODevice::ReadOnly))
     {
         events.setSize(0, 0);
         timeStamps.setSize(0, 0);
         return OPEN_ERROR;
     }
 
-    //Set the size of the Arrays containing the time and ids of the events.
-    events.setSize(1, nbEvents);
-    timeStamps.setSize(1, nbEvents);
-
+    //Each non-empty line holds the time of an event in milliseconds, optionally followed by its description.
+    static const QRegularExpression whitespace(QStringLiteral("\\s"));
+    QVector<double> times;
+    QVector<EventDescription> labels;
     QTextStream fileStream(&eventFile);
-    QString line;
-    int lineCounter = 0;
-    for (line = fileStream.readLine(); !line.isNull() && lineCounter < nbEvents; line = fileStream.readLine())
+    for (QString line = fileStream.readLine(); !line.isNull(); line = fileStream.readLine())
     {
         line = line.trimmed();
+        if (line.isEmpty())
+            continue;
 
-        int index1 = line.indexOf(QRegularExpression("\\s"));
-        int index2 = line.indexOf(QRegularExpression("\\S"), index1);
-
-        timeStamps[lineCounter] = line.left(index1).toDouble();
-        EventDescription label = line.right(line.length() - index2);
-        events[lineCounter] = label;
-        if (eventDescriptionCounter.contains(label))
+        const qsizetype separator = line.indexOf(whitespace);
+        bool ok = false;
+        times.append(line.left(separator).toDouble(&ok));
+        if (!ok || !roundToDataType(times.last()))
         {
-            eventDescriptionCounter.insert(label, eventDescriptionCounter[label] + 1);
+            events.setSize(0, 0);
+            timeStamps.setSize(0, 0);
+            return INCORRECT_CONTENT;
         }
-        else
-            eventDescriptionCounter.insert(label, 1);
-        lineCounter++;
+        labels.append(separator < 0 ? QString() : line.mid(separator).trimmed());
     }
 
     eventFile.close();
     qDebug() << "Loading evt file into memory: " << Timer() << "\n";
 
-
-    //The number of events read has to be coherent with the number of events read.
-    if (lineCounter != nbEvents)
+    nbEvents = times.size();
+    if (nbEvents == 0)
     {
-        events.setSize(0, 0);
-        timeStamps.setSize(0, 0);
-        return INCORRECT_CONTENT;
+        initializeEmptyProvider();
+        return OK;
+    }
+
+    //Set the size of the Arrays containing the time and ids of the events.
+    events.setSize(1, nbEvents);
+    timeStamps.setSize(1, nbEvents);
+    for (long i = 0; i < nbEvents; ++i)
+    {
+        timeStamps[i] = times[i];
+        events[i] = labels[i];
+        ++eventDescriptionCounter[labels[i]];
     }
 
     updateMappingAndDescriptionLength();

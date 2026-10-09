@@ -59,8 +59,7 @@ class EventsProvider : public DataProvider
     {
         OK = 0,
         OPEN_ERROR = 1,
-        INCORRECT_CONTENT = 2,
-        COUNT_ERROR = 3
+        INCORRECT_CONTENT = 2
     };
 
 
