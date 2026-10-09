@@ -52,6 +52,27 @@ class TestNeuroscopeDoc : public QObject
         QCOMPARE(doc->url(), datPath);
         QCOMPARE(doc->getChannelLabels()->size(), NB_CHANNELS);
     }
+
+    void changeTheChannelCount_data()
+    {
+        QTest::addColumn<int>("nbChannels");
+        QTest::newRow("more") << NB_CHANNELS + 3;
+        QTest::newRow("fewer") << NB_CHANNELS - 1;
+    }
+
+    // The channel palettes label every channel of the new count.
+    void changeTheChannelCount()
+    {
+        QFETCH(int, nbChannels);
+        const QString datPath = writeRecording(QDir(dir.path()), QString("count-") + QTest::currentDataTag(), NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
+        auto app = testutils::openRecording(datPath);
+        NeuroscopeDoc* doc = app->getDocument();
+
+        doc->setChannelNb(nbChannels);
+
+        QCOMPARE(doc->getChannelNb(), nbChannels);
+        QCOMPARE(doc->getChannelLabels()->size(), nbChannels);
+    }
 };
 
 QTEST_MAIN(TestNeuroscopeDoc)
