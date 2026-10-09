@@ -25,6 +25,7 @@
 
 // include files for QT
 #include <QObject>
+#include <QPair>
 #include <QStringList>
 
 /**Class providing the row recorded data (contained in a .dat or .eeg file).
@@ -185,6 +186,9 @@ class TracesProvider : public DataProvider
     /**the total length of the document in miliseconds.*/
     qlonglong length;
 
+    /**Index of the last sample in the file, starting at 0.*/
+    qint64 lastSample;
+
     //Functions
 
     /**Retrieves the traces included in the time frame given by @p startTime and @p endTime.
@@ -197,6 +201,13 @@ class TracesProvider : public DataProvider
 
     /**Computes the total length of the document in miliseconds.*/
     virtual void computeRecordingLength();
+
+    /**Returns the first and the last samples, both included, of the time frame given by @p startTime and @p endTime.
+  * @param startTime begining of the time frame, given in milisecond.
+  * @param endTime end of the time frame, given in milisecond.
+  * @param startTimeInRecordingUnits begining of the time frame in recording units, replacing @p startTime if not 0.
+  */
+    QPair<dataType, dataType> samplesInWindow(long startTime, long endTime, long startTimeInRecordingUnits) const;
 
     static inline dataType round(double d)
     {

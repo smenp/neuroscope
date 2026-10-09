@@ -155,6 +155,9 @@ class TestTracesProvider : public QObject
         QTest::newRow("1250 Hz") << 1250.0 << 10_i64 << 20_i64 << 0_i64 << 12_i64 << 14_i64;
         // A window ending at the recording length excludes the sample at the end time.
         QTest::newRow("end of file") << 1000.0 << 1900_i64 << 2000_i64 << 0_i64 << 1900_i64 << 100_i64;
+        // A window ending at the recording length, truncated to whole milliseconds, ends with the last sample:
+        // at 3 kHz, 2000 samples last 666.7 ms and the last sample is at 666.3 ms.
+        QTest::newRow("end of file within the last millisecond") << 3000.0 << 600_i64 << 666_i64 << 0_i64 << 1800_i64 << 200_i64;
         // A start in recording units, from a previous browsing request, replaces the start time.
         QTest::newRow("start in recording units") << 1000.0 << 100_i64 << 199_i64 << 50_i64 << 50_i64 << 150_i64;
     }

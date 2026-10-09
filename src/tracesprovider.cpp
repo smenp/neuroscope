@@ -53,31 +53,24 @@ TracesProvider::~TracesProvider()
 
 dataType TracesProvider::getNbSamples(long startTime, long endTime, long startTimeInRecordingUnits)
 {
-    //Search what is the number of samples in the given time frame.
-    //Convert the time in miliseconds to time in recording units.
+    const QPair<dataType, dataType> samples = samplesInWindow(startTime, endTime, startTimeInRecordingUnits);
+    return samples.second - samples.first + 1;
+}
 
+QPair<dataType, dataType> TracesProvider::samplesInWindow(long startTime, long endTime, long startTimeInRecordingUnits) const
+{
     //Convert the time in miliseconds to time in recording units if need it.
-    dataType startInRecordingUnits;
     //startTimeInRecordingUnits has been computed in a previous call to a clustersProvider browsing function. It has to be used insted of computing
     //the value from startTime because of the rounding which has been applied to it.
-    if (startTimeInRecordingUnits != 0)
-        startInRecordingUnits = startTimeInRecordingUnits;
-    else
-        startInRecordingUnits = static_cast<dataType>(startTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    dataType endInRecordingUnits = static_cast<dataType>(endTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
+    const double samplesPerMillisecond = samplingRate / 1000.0;
+    const dataType first = startTimeInRecordingUnits != 0 ? startTimeInRecordingUnits : static_cast<dataType>(startTime * samplesPerMillisecond);
 
     //The caller should have check that we do not go over the end of the file.
-    //The recording starts at time equals 0 and ends at length of the file minus one.
-    //Therefore if the end time requested equals the length of the file, endInRecordingUnits
-    // should be diminish by one sample.
-    if (endTime == length)
-        endInRecordingUnits--;
-
-    dataType nbSamples = static_cast<dataType>(endInRecordingUnits - startInRecordingUnits) + 1;
-
-    return nbSamples;
+    //The length of the recording is truncated to whole miliseconds, so the sample at the end time of a window ending
+    //at the length may lie past the end of the file, and samples may lie between the length and the end of the file.
+    //Such a window ends with the last sample of the file.
+    const dataType last = endTime == length ? lastSample : static_cast<dataType>(endTime * samplesPerMillisecond);
+    return qMakePair(first, last);
 }
 
 void TracesProvider::requestData(long startTime, long endTime, QObject* initiator, long startTimeInRecordingUnits)
@@ -108,26 +101,9 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
   return;
  }*/
 
-    //Search what is the number of samples in the given time frame.
-
-    //Convert the time in miliseconds to time in recording units if need it.
-    dataType startInRecordingUnits;
-    //startTimeInRecordingUnits has been computed in a previous call to a clustersProvider browsing function. It has to be used insted of computing
-    //the value from startTime because of the rounding which has been applied to it.
-    if (startTimeInRecordingUnits != 0)
-        startInRecordingUnits = startTimeInRecordingUnits;
-    else
-        startInRecordingUnits = static_cast<dataType>(startTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-    dataType endInRecordingUnits = static_cast<dataType>(endTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    //The caller should have check that we do not go over the end of the file.
-    //The recording starts at time equals 0 and ends at length of the file minus one.
-    //Therefore if the end time requested equals the length of the file, endInRecordingUnits
-    // should be diminish by one sample.
-    if (endTime == length)
-        endInRecordingUnits--;
-
-    dataType nbSamples = static_cast<dataType>(endInRecordingUnits - startInRecordingUnits) + 1;
+    const QPair<dataType, dataType> samples = samplesInWindow(startTime, endTime, startTimeInRecordingUnits);
+    const dataType startInRecordingUnits = samples.first;
+    const dataType nbSamples = samples.second - samples.first + 1;
 
     //data will contain the final values.
     data.setSize(nbSamples, nbChannels);
@@ -371,12 +347,12 @@ void TracesProvider::computeRecordingLength()
  qint64 fileLength = dataFile.tellg();
  dataFile.close();*/
 
+    length = 0;
+    lastSample = -1;
+
     QFile f(fileName);
     if (!f.open(QIODevice::ReadOnly))
-    {
-        length = 0;
         return;
-    }
     f.close();
     QFileInfo fInfo(fileName);
     qint64 fileLength = fInfo.size();
@@ -386,7 +362,10 @@ void TracesProvider::computeRecordingLength()
         dataSize = 2;
     else if (resolution == 32)
         dataSize = 4;
+    if (dataSize == 0 || nbChannels <= 0 || samplingRate <= 0)
+        return;
 
+    qint64 nbSamples;
     // Is this a Neuralynx file?
     int p = fileName.lastIndexOf(".ncs");
     if (p != -1)
@@ -404,22 +383,16 @@ void TracesProvider::computeRecordingLength()
         int extraData = (fileLength - sizeof(fileHeader)) - nRecords * recordSize - sizeof(recordHeader);
         if (extraData < 0)
             extraData = 0;
-        int64_t dataLength = nRecords * nSamplesPerRecord * dataSize + extraData;
-
-        length = static_cast<qlonglong>(
-            static_cast<float>(
-                dataLength / static_cast<float>(samplingRate * dataSize) // Only one channel per file!
-                ) *
-            1000);
+        // Only one channel per file!
+        nbSamples = nRecords * nSamplesPerRecord + extraData / dataSize;
         /// (end of code modified by M.Zugaro)
     }
     else
-    {
-        length = static_cast<qlonglong>(
-            static_cast<float>(
-                fileLength / static_cast<float>(nbChannels * samplingRate * dataSize)) *
-            1000);
-    }
+        nbSamples = fileLength / (static_cast<qint64>(nbChannels) * dataSize);
+
+    lastSample = nbSamples - 1;
+    // In double precision: in single precision, the length of a recording of a few minutes can already be rounded past its end.
+    length = static_cast<qlonglong>(static_cast<double>(nbSamples) * 1000.0 / samplingRate);
 }
 
 long TracesProvider::getTotalNbSamples()
