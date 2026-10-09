@@ -17,6 +17,13 @@ function(neuroscope_add_test name)
     endif()
 endfunction()
 
+# Tests of the windows and documents of the application.
+function(neuroscope_add_app_test name)
+    neuroscope_add_test(${name})
+    target_sources(${name} PRIVATE apptestutils.h)
+    target_link_libraries(${name} PRIVATE neuroscope_app)
+endfunction()
+
 neuroscope_add_test(test_tracesprovider)
 neuroscope_add_test(test_nsxtracesprovider)
 neuroscope_add_test(test_clustersprovider)
