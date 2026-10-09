@@ -25,6 +25,7 @@
 #include <QTimer>
 #include <QtTest>
 
+#include <functional>
 #include <memory>
 
 namespace
@@ -359,6 +360,41 @@ class TestChannelPalette : public QObject
         };
         QCOMPARE(adjustmentsToMove({ 0, 1, 2 }), adjustmentsToMove({ 4 }));
         verifyConsistent();
+    }
+
+    void selectionSignalledOncePerMove_data()
+    {
+        using Move = std::function<void(ChannelPalette*)>;
+        QTest::addColumn<Move>("move");
+        QTest::addColumn<int>("displaySignals");
+        QTest::addColumn<int>("spikeSignals");
+        QTest::newRow("new group") << Move([](ChannelPalette* palette) { palette->createGroup(); }) << 1 << 0;
+        QTest::newRow("drag to group") << Move([](ChannelPalette* palette) { dragOnto(palette, 0, 5); }) << 1 << 0;
+        QTest::newRow("drag within group") << Move([](ChannelPalette* palette) { dragOnto(palette, 0, 3); }) << 1 << 0;
+        QTest::newRow("drag to trash") << Move([](ChannelPalette* palette) { dragOnto(palette, 0, 9); }) << 1 << 1;
+    }
+
+    void selectionSignalledOncePerMove()
+    {
+        QFETCH(std::function<void(ChannelPalette*)>, move);
+        QFETCH(int, displaySignals);
+        QFETCH(int, spikeSignals);
+        select(palettes->display, { 0, 1, 2 });
+        QSignalSpy display(palettes->display, &ChannelPalette::channelsSelected);
+        QSignalSpy spike(palettes->spike, &ChannelPalette::channelsSelected);
+        move(palettes->display);
+        verifyConsistent();
+        QCOMPARE(display.count(), displaySignals);
+        QCOMPARE(spike.count(), spikeSignals);
+    }
+
+    void selectionSignalledAfterDiscardingNothing()
+    {
+        select(palettes->display, {});
+        palettes->display->discardChannels();
+        QSignalSpy selections(palettes->display, &ChannelPalette::channelsSelected);
+        item(palettes->display, 1)->setSelected(true);
+        QCOMPARE(selections.count(), 1);
     }
 };
 
