@@ -109,11 +109,58 @@ class TestPositionsProvider : public QObject
         QCOMPARE(data.values, QVector<std::int64_t>({12, 34}));
     }
 
-    void inconsistentLinesAreIncorrect()
+    void layout_data()
     {
-        writeTextFile(path("inconsistent.pos"), "1 2\n3 4 5\n6 7\n");
-        PositionsProvider provider(path("inconsistent.pos"), SAMPLING_RATE, WIDTH, HEIGHT, 0, 0);
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QVector<std::int64_t>>("values");
+
+        QString wideLine;
+        QVector<std::int64_t> wideValues;
+        for (int i = 0; i < 100; ++i)
+        {
+            wideLine += QString(" %1").arg(1000 + i);
+            wideValues.append(1000 + i);
+        }
+        QTest::newRow("first line longer than 255 characters") << wideLine + "\n" << wideValues;
+        QTest::newRow("value longer than 255 characters") << "1 2\n" + QString(300, '0') + "3 4\n"
+                                                          << QVector<std::int64_t>({1, 2, 3, 4});
+        QTest::newRow("last line without newline") << "1 2\n3 4" << QVector<std::int64_t>({1, 2, 3, 4});
+    }
+
+    void layout()
+    {
+        QFETCH(QString, content);
+        QFETCH(QVector<std::int64_t>, values);
+
+        writeTextFile(path("layout.pos"), content);
+        PositionsProvider provider(path("layout.pos"), SAMPLING_RATE, WIDTH, HEIGHT, 0, 0);
+        QCOMPARE(provider.loadData(), int(PositionsProvider::OK));
+        Matrix result;
+        connect(&provider, &PositionsProvider::dataReady, [&](Array<dataType>& data, QObject*) { result = toMatrix(data); });
+        provider.retrieveAllData(nullptr);
+        QCOMPARE(result.values, values);
+    }
+
+    void incorrectContent_data()
+    {
+        QTest::addColumn<QString>("content");
+
+        QTest::newRow("inconsistent lines") << "1 2\n3 4 5\n6 7\n";
+        QTest::newRow("not a number") << "1 2\n3 -\n";
+        QTest::newRow("out of range") << "1 2\n3 1e300\n";
+        QTest::newRow("empty line") << "1 2\n\n3 4\n";
+        QTest::newRow("line without values") << "1 2\nnan nan\n3 4\n";
+    }
+
+    void incorrectContent()
+    {
+        QFETCH(QString, content);
+
+        writeTextFile(path("incorrect.pos"), content);
+        PositionsProvider provider(path("incorrect.pos"), SAMPLING_RATE, WIDTH, HEIGHT, 0, 0);
         QCOMPARE(provider.loadData(), int(PositionsProvider::INCORRECT_CONTENT));
+        // The application keeps the provider; it has no positions.
+        QVERIFY(request(provider, 0, 100).isEmpty());
     }
 
     void readWindow_data()

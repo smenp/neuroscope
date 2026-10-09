@@ -17,7 +17,13 @@
 #ifndef TEXTVALUES_H
 #define TEXTVALUES_H
 
+#include "types.h"
+
 #include <QByteArrayView>
+
+#include <cmath>
+#include <limits>
+#include <optional>
 
 /**
  * Calls onValue(QByteArrayView value) for every value in @p text, a value being a run of the
@@ -59,6 +65,17 @@ bool forEachTextValue(QByteArrayView text, OnValue onValue)
 {
     return forEachTextValue(text, onValue, []
                             { return true; });
+}
+
+/** @p value rounded half up, or nothing if the result is not in the range of dataType or @p value is NaN. */
+inline std::optional<dataType> roundToDataType(double value)
+{
+    const double rounded = std::floor(0.5 + value);
+    //-min() is a power of two, exact as a double unlike max().
+    const double lowest = static_cast<double>(std::numeric_limits<dataType>::min());
+    if (!(rounded >= lowest && rounded < -lowest))
+        return std::nullopt;
+    return static_cast<dataType>(rounded);
 }
 
 #endif

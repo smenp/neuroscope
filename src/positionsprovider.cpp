@@ -16,13 +16,13 @@
  ***************************************************************************/
 //include files for the application
 #include "positionsprovider.h"
+#include "textvalues.h"
 #include "timer.h"
-#include "utilities.h"
 
 // include files for QT
-#include <QStringList>
-#include <QFileInfo>
 #include <QDebug>
+#include <QFile>
+#include <QVector>
 
 
 PositionsProvider::PositionsProvider(const QString& fileUrl, double samplingRate, int width, int height, int rotation, int flip)
@@ -48,93 +48,55 @@ void PositionsProvider::requestData(long startTime, long endTime, QObject* initi
 
 int PositionsProvider::loadData()
 {
-
-    //Get the number of positions
-    nbPositions = Utilities::getNbLines(fileName);
-
-    if (nbPositions == -1)
+    //On failure, the provider is left without positions.
+    auto fail = [this](int status)
     {
         positions.setSize(0, 0);
-        return COUNT_ERROR;
-    }
+        nbPositions = 0;
+        nbCoordinates = 0;
+        return status;
+    };
 
-    if (nbPositions == 0)
-    {
-        positions.setSize(0, 0);
-        return OK;
-    }
-
-    //Create a reader on the eventFile
     QFile positionFile(fileName);
-    bool status = positionFile.open(QIODevice::ReadOnly);
-    if (!status)
-    {
-        positions.setSize(0, 0);
-        return OPEN_ERROR;
-    }
+    if (!positionFile.open(QIODevice::ReadOnly))
+        return fail(OPEN_ERROR);
 
     RestartTimer();
 
-    QString firstLine;
-
-    QByteArray buf;
-    buf.resize(255);
-    int ret = positionFile.readLine(buf.data(), 255);
-    firstLine = QString::fromLatin1(buf, ret);
-
-
-    //Set the size of the Arrays containing the positions using the first line.
-    firstLine = firstLine.simplified();
-    QStringList lineParts = firstLine.split(QLatin1String(" "), Qt::SkipEmptyParts);
-    nbCoordinates = lineParts.count();
-    dataType k = nbCoordinates;
-    positions.setSize(nbPositions, nbCoordinates);
-    for (int i = 0; i < nbCoordinates; ++i)
-    {
-        positions(1, i + 1) = static_cast<dataType>(floor(0.5 + lineParts[i].toDouble()));
-    }
-
-
-    QByteArray buffer = positionFile.readAll();
-    uint size = buffer.size();
-
-    //The buffer is read and each dataType is build char by char into a string. When the char read
-    //is not [1-9],e or + (<=> blank space or a new line), the string is converted into a dataType and store
-    //into positions.
-    //string of character which will contains the current seek dataType
-    int l = 0;
-    char clusterID[255];
-    for (uint i = 0; i < size; ++i)
-    {
-        if (buffer[i] >= '0' && buffer[i] <= '9' || buffer[i] == 'e' | buffer[i] == 'E' || buffer[i] == '+' || buffer[i] == '-' || buffer[i] == '.')
-            clusterID[l++] = buffer[i];
-        else if (l)
+    //Each non-empty line holds one position, with as many coordinates as the first one.
+    QVector<dataType> values;
+    nbCoordinates = 0;
+    int nbValuesInLine = 0;
+    const bool read = forEachTextValue(
+        positionFile.readAll(),
+        [&](QByteArrayView value)
         {
-            clusterID[l] = '\0';
-            //More values than expected from the first line: stop before writing past the end of positions.
-            if (k == nbPositions * nbCoordinates)
-            {
-                positionFile.close();
-                positions.setSize(0, 0);
-                return INCORRECT_CONTENT;
-            }
-            double pos = atof(clusterID);
-            //The precision is lost
-            positions[k++] = static_cast<dataType>(floor(0.5 + pos)); //Warning if the typedef dataType changes, change will have to be make here.
-            l = 0;
-        }
-    }
-
+            bool ok = false;
+            const std::optional<dataType> rounded = roundToDataType(value.toDouble(&ok));
+            if (!ok || !rounded)
+                return false;
+            values.append(*rounded);
+            ++nbValuesInLine;
+            return true;
+        },
+        [&]
+        {
+            if (nbCoordinates == 0)
+                nbCoordinates = nbValuesInLine;
+            const bool consistent = nbValuesInLine == nbCoordinates;
+            nbValuesInLine = 0;
+            return consistent;
+        });
     positionFile.close();
+    if (!read)
+        return fail(INCORRECT_CONTENT);
+
+    nbPositions = nbCoordinates == 0 ? 0 : values.size() / nbCoordinates;
+    positions.setSize(nbPositions, nbCoordinates);
+    for (qsizetype i = 0; i < values.size(); ++i)
+        positions[i] = values[i];
+
     qDebug() << "Loading pos file into memory: " << Timer() << "\n";
-
-
-    //The number of positions read has to be coherent with the number of positions read.
-    if (k != nbPositions * nbCoordinates)
-    {
-        positions.setSize(0, 0);
-        return INCORRECT_CONTENT;
-    }
 
     return OK;
 }
