@@ -213,8 +213,6 @@ class TestTracesProvider : public QObject
         for (std::int64_t s = 0; s < 10; ++s)
             for (int c = 0; c < 4; ++c)
                 expected.append(roundHalfAway(raw32(100 + s, c) * gain(32)));
-        if (sizeof(dataType) != sizeof(std::int32_t))
-            QEXPECT_FAIL("", "32 bit samples are read into an array of long, which has 64 bits on Linux and macOS (#13)", Abort);
         QCOMPARE(data.values, expected);
     }
 
