@@ -193,17 +193,31 @@ class TestTracesProvider : public QObject
             QCOMPARE(data(1, c + 1), roundHalfAway(raw16(10, c) * gain(12)));
     }
 
+    void offsetIsSubtracted_data()
+    {
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<int>("resolution");
+
+        QTest::newRow("16 bit") << "session.dat" << 16;
+        QTest::newRow("32 bit") << "session32.dat" << 32;
+    }
+
     void offsetIsSubtracted()
     {
-        // Current behaviour: with a non-zero offset, the raw value is not scaled, only the offset is:
-        // value = raw - offset * gain. Without an offset, value = raw * gain (#17).
+        // The offset is in raw units: value = (raw - offset) * gain (#17).
+        QFETCH(QString, file);
+        QFETCH(int, resolution);
+
         const int offset = 100;
-        TracesProvider provider(path("session.dat"), 4, 16, VOLTAGE_RANGE, AMPLIFICATION, 1000.0, offset);
+        TracesProvider provider(path(file), 4, resolution, VOLTAGE_RANGE, AMPLIFICATION, 1000.0, offset);
         const Matrix data = request(provider, 10, 11);
         QCOMPARE(data.rows, 2_i64);
         for (std::int64_t s = 0; s < 2; ++s)
             for (int c = 0; c < 4; ++c)
-                QCOMPARE(data(s + 1, c + 1), roundHalfAway(raw16(10 + s, c) - offset * gain(16)));
+            {
+                const std::int64_t raw = resolution == 16 ? raw16(10 + s, c) : raw32(10 + s, c);
+                QCOMPARE(data(s + 1, c + 1), roundHalfAway((raw - offset) * gain(resolution)));
+            }
     }
 
     void read32Bit()

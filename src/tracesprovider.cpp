@@ -213,22 +213,9 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
             }
             dataFile.close();
         }
-        //Apply the offset if need it,convert to dataType and store the values in data.
-        if (offset != 0)
-        {
-            for (qint64 i = 0; i < nbValues; ++i)
-            {
-                data[i] = round(static_cast<dataType>(retrieveData[i]) - offset * acquisitionGain);
-            }
-        }
-        else
-        {
-
-            for (qint64 i = 0; i < nbValues; ++i)
-            {
-                data[i] = round(static_cast<dataType>(retrieveData[i]) * acquisitionGain);
-            }
-        }
+        //Subtract the offset, convert to microvolts and store the values in data.
+        for (qint64 i = 0; i < nbValues; ++i)
+            data[i] = round((static_cast<dataType>(retrieveData[i]) - offset) * acquisitionGain);
     }
     else if (resolution == 32)
     {
@@ -256,19 +243,9 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
             emit dataReady(data, initiator);
             return;
         }
-        //Apply the offset if need it and store the values in data.
-        if (offset != 0)
-        {
-            for (qint64 i = 0; i < nbValues; ++i)
-                data[i] = round(retrieveData[i] - offset * acquisitionGain);
-        }
-        else
-        {
-            for (qint64 i = 0; i < nbValues; ++i)
-            {
-                data[i] = round(retrieveData[i] * acquisitionGain);
-            }
-        }
+        //Subtract the offset, convert to microvolts and store the values in data.
+        for (qint64 i = 0; i < nbValues; ++i)
+            data[i] = round((static_cast<dataType>(retrieveData[i]) - offset) * acquisitionGain);
         //The data have been retrieve, close the file.
         dataFile.close();
     }
