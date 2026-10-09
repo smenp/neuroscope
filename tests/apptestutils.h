@@ -26,6 +26,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QSettings>
 #include <QTabWidget>
 #include <QTemporaryDir>
@@ -141,6 +142,28 @@ inline bool closeFileOfPalette(NeuroscopeApp* app, const char* paletteName, cons
     QMetaObject::invokeMethod(app, closeSlot);
     return true;
 }
+
+/** Closes and records every message box shown while it exists. */
+class MessageBoxRecorder
+{
+  public:
+    MessageBoxRecorder()
+    {
+        QObject::connect(&timer, &QTimer::timeout, [this]
+                         {
+            if (QMessageBox* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+            {
+                texts.append(box->text());
+                box->done(QMessageBox::Ok);
+            } });
+        timer.start(0);
+    }
+
+    QStringList texts;
+
+  private:
+    QTimer timer;
+};
 
 } // namespace testutils
 

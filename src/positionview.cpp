@@ -491,6 +491,8 @@ void PositionView::drawEvents(QPainter& painter)
 {
     QPen pen;
     pen.setWidth(3);
+    //Events after the last position of the shown time window have no position to be drawn at.
+    const long nbPositions = data.nbOfRows();
     QMap<QString, QList<int>>::Iterator iterator;
     QMap<QString, QList<int>>::Iterator end(selectedEvents.end());
     for (iterator = selectedEvents.begin(); iterator != end; ++iterator)
@@ -507,7 +509,7 @@ void PositionView::drawEvents(QPainter& painter)
         {
             dataType index = currentData(1, i);
             int eventId = currentIds(1, i);
-            if (eventList.contains(eventId))
+            if (eventList.contains(eventId) && index >= 1 && index <= nbPositions)
             {
                 QColor color = colors->color(eventId);
                 pen.setColor(color);
