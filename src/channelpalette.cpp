@@ -2481,6 +2481,9 @@ void GroupLabel::mousePressEvent(QMouseEvent* e)
         ChannelMimeData* mimeData = new ChannelMimeData;
         mimeData->setInformation(parent()->objectName().toInt(), firstClick.y());
         drag->setMimeData(mimeData);
+        //The label follows the mouse, held where it was pressed
+        drag->setPixmap(grab());
+        drag->setHotSpot(e->position().toPoint());
         Qt::DropAction dropAction = drag->exec();
         e->accept();
 

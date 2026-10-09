@@ -20,7 +20,9 @@
 #include "channelpalette.h"
 
 #include <QApplication>
+#include <QDrag>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QThread>
 #include <QTimer>
 #include <QtTest>
@@ -190,6 +192,49 @@ int spaceBelowChannels(ChannelPalette* palette, int id)
     ChannelIconView* view = group(palette, id);
     QWidget* box = view->parentWidget();
     return box->height() - view->viewport()->mapTo(box, QPoint(0, lastItemBottom(view))).y();
+}
+
+/** Box of a group: its label and its channels. */
+ChannelGroupView* box(ChannelPalette* palette, int id)
+{
+    return static_cast<ChannelGroupView*>(group(palette, id)->parentWidget());
+}
+
+/** Window position of a point of the box of a group. */
+QPoint inWindow(ChannelPalette* palette, int id, const QPoint& boxPos)
+{
+    ChannelGroupView* groupBox = box(palette, id);
+    return groupBox->mapTo(groupBox->window(), boxPos);
+}
+
+/** Drags a group by its label and drops it at the window position target() gives once the mouse is over it.
+ * Calls during(drag) while the group is dragged. */
+void dragGroup(ChannelPalette* palette, int id, const std::function<QPoint()>& target, const std::function<void(QDrag*)>& during = {})
+{
+    QLabel* label = box(palette, id)->label();
+    QWindow* window = palette->window()->windowHandle();
+    const QPoint press = label->mapTo(label->window(), label->rect().center());
+    bool released = false;
+    bool settled = false;
+    const auto release = [&]()
+    {
+        released = true;
+        if (during)
+            during(label->findChild<QDrag*>());
+        // The palette under the mouse scrolls to keep it away from its edges, which moves the target.
+        QTest::mouseMove(window, target());
+        const QPoint drop = target();
+        QTest::mouseMove(window, drop);
+        settled = target() == drop;
+        QTest::mouseRelease(window, Qt::LeftButton, {}, drop);
+    };
+    // The label starts the drag as soon as it is pressed; QDrag::exec() runs its own event loop.
+    QObject context;
+    QTimer::singleShot(0, &context, release);
+    QTest::mousePress(window, Qt::LeftButton, {}, press);
+    QCoreApplication::processEvents();
+    QVERIFY2(released, "the label did not start a drag");
+    QVERIFY2(settled, "the palette kept scrolling under the mouse");
 }
 
 } // namespace
@@ -395,6 +440,24 @@ class TestChannelPalette : public QObject
         QSignalSpy selections(palettes->display, &ChannelPalette::channelsSelected);
         item(palettes->display, 1)->setSelected(true);
         QCOMPARE(selections.count(), 1);
+    }
+
+    void dragGroupShowsItsLabel()
+    {
+        QLabel* label = box(palettes->display, 1)->label();
+        QVERIFY(!label->size().isEmpty());
+        QImage dragged;
+        QPoint hotSpot;
+        const QPoint press = label->mapTo(label->window(), label->rect().center());
+        dragGroup(palettes->display, 1, [=]() { return press; },
+                  [&](QDrag* drag)
+                  {
+                      QVERIFY(drag);
+                      dragged = drag->pixmap().toImage();
+                      hotSpot = drag->hotSpot();
+                  });
+        QCOMPARE(dragged, label->grab().toImage());
+        QCOMPARE(hotSpot, label->rect().center());
     }
 };
 
