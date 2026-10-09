@@ -115,6 +115,21 @@ class TestNeuroscopeDoc : public QObject
         QCOMPARE(messages.texts, QStringList());
     }
 
+    // The video rotation and flip saved in the parameter file are those of the opened recording.
+    void readTheVideoSettingsOfTheParameterFile()
+    {
+        const QDir recordingDir(dir.path());
+        const QString datPath = writeRecording(recordingDir, "video", NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
+        writeTextFile(recordingDir.filePath("video.xml"),
+                      parameterFile(NB_CHANNELS, SAMPLING_RATE)
+                          .replace("</parameters>", "<neuroscope version=\"2.0.0\"><video><rotate>90</rotate><flip>1</flip></video></neuroscope></parameters>"));
+
+        auto app = testutils::openRecording(datPath);
+
+        QCOMPARE(app->getDocument()->getRotation(), 90);
+        QCOMPARE(app->getDocument()->getFlip(), 1);
+    }
+
     // The duration can be typed up to the length of the recording.
     void typeALongDuration()
     {

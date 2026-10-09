@@ -153,13 +153,11 @@ class TestNeuroscopeXmlReader : public QObject
     {
         QCOMPARE(reader.getScreenGain(), 0.2f);
         QCOMPARE(reader.getTraceBackgroundImage(), QString("background.png"));
-        // Current behaviour: the video settings are only read from a top-level <video> element,
-        // as in session files. The values NeuroScope writes to <neuroscope><video> in parameter files
-        // are not read, and the defaults are returned (#18).
-        QCOMPARE(reader.getRotation(), 0);
-        QCOMPARE(reader.getFlip(), 0);
-        QCOMPARE(reader.getBackgroundImage(), QString("-"));
-        QCOMPARE(reader.getTrajectory(), 0);
+        // Parameter files hold the video settings in <neuroscope><video> (#18).
+        QCOMPARE(reader.getRotation(), 90);
+        QCOMPARE(reader.getFlip(), 1);
+        QCOMPARE(reader.getBackgroundImage(), QString("arena.png"));
+        QCOMPARE(reader.getTrajectory(), 1);
         // For parameter files the spike waveform comes from the NeuroScope section.
         QCOMPARE(reader.getNbSamples(), 40);
         QCOMPARE(reader.getPeakSampleIndex(), 20);

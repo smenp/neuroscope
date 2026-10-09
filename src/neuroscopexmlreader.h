@@ -228,6 +228,11 @@ class NeuroscopeXmlReader
     NeuroscopeXmlReader::fileType getType() const { return type; }
 
   private:
+    /**Returns the element holding the video rotation, flip, background image and trajectory settings,
+  * a null element if there is none.
+  */
+    QDomElement videoSettings() const;
+
     fileType type;
     QString readVersion;
     QDomNode documentNode;
