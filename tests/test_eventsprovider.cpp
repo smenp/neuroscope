@@ -313,6 +313,17 @@ class TestEventsProvider : public QObject
         QCOMPARE(describe(previous), QString("(100, %1) (200, %2) (500, %1)").arg(lick).arg(reward));
     }
 
+    // A file without events answers the request for the previous event with no event, leaving the window where it is.
+    void previousEventInAFileWithoutEvents()
+    {
+        EventsProvider provider(path("empty.emp.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+
+        const Result previous = requestPrevious(provider, 500, 1000, {});
+        QVERIFY(previous.times.isEmpty());
+        QCOMPARE(previous.startingTime, 500_i64);
+    }
+
     void saveRoundTrip()
     {
         EventsProvider provider(path("many.abc.evt"), 20000.0);

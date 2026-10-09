@@ -649,6 +649,14 @@ void EventsProvider::requestNextEventData(long startTime, long timeFrame, const 
 
 void EventsProvider::requestPreviousEventData(long startTime, long timeFrame, QList<int> selectedIds, QObject* initiator)
 {
+    if (nbEvents == 0)
+    {
+        Array<dataType> times;
+        Array<int> ids;
+        emit previousEventDataReady(times, ids, initiator, name, startTime);
+        return;
+    }
+
     long initialStartTime = startTime;
     //Compute the start time for the event look up
     startTime = initialStartTime + static_cast<long>(timeFrame * eventPosition);
