@@ -2557,11 +2557,6 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadCluClusterFile(con
         delete clustersProvider;
         return MISSING_FILE;
     }
-    else if (returnStatus == ClustersProvider::COUNT_ERROR)
-    {
-        delete clustersProvider;
-        return CREATION_ERROR;
-    }
     else if (returnStatus == ClustersProvider::INCORRECT_CONTENT)
     {
         delete clustersProvider;
@@ -2676,16 +2671,6 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadClusterFileForSess
                                                    .arg(clusterUrl));
         QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
         return MISSING_FILE;
-    }
-    else if (returnStatus == ClustersProvider::COUNT_ERROR)
-    {
-        delete clustersProvider;
-        QApplication::restoreOverrideCursor();
-        QMessageBox::critical(0, tr("Error!"), tr("The number of spikes of the requested file %1 could not be determined."
-                                                  " Therefore this file will not be loaded.")
-                                                   .arg(clusterUrl));
-        QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
-        return CREATION_ERROR;
     }
     else if (returnStatus == ClustersProvider::INCORRECT_CONTENT)
     {

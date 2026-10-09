@@ -20,13 +20,14 @@
 #include <QFileInfo>
 
 #include <QList>
+#include <QVector>
 #include <QMap>
 #include <QDebug>
 
 //include files for the application
 #include "clustersprovider.h"
+#include "textvalues.h"
 #include "timer.h"
-#include "utilities.h"
 
 
 ClustersProvider::ClustersProvider(const QString& fileUrl, double samplingRate, double currentSamplingRate, dataType fileMaxTime, int position)
@@ -60,29 +61,46 @@ ClustersProvider::~ClustersProvider()
 {
 }
 
+namespace
+{
+/** Reads the integers of a .clu or .res file into @p values; returns a ClustersProvider::loadReturnMessage. */
+int readIntegers(const QString& path, QVector<dataType>& values)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return ClustersProvider::OPEN_ERROR;
+    const bool read = forEachTextValue(file.readAll(),
+                                       [&](QByteArrayView value)
+                                       {
+                                           bool ok = false;
+                                           values.append(static_cast<dataType>(value.toLongLong(&ok)));
+                                           return ok;
+                                       });
+    return read ? ClustersProvider::OK : ClustersProvider::INCORRECT_CONTENT;
+}
+} // namespace
+
 int ClustersProvider::loadData()
 {
 
     //Fist check if the time file (.res) exists
-    QString timeFilePath = timeFileUrl;
     if (!QFile(timeFileUrl).exists())
     {
         clusters.setSize(0, 0);
         return MISSING_FILE;
     }
 
-    //Get the number of spikes
-    nbSpikes = Utilities::getNbLines(timeFilePath);
+    RestartTimer();
 
-    qDebug() << "nbSpikes " << nbSpikes;
-
-    if (nbSpikes == -1)
+    QVector<dataType> times;
+    int status = readIntegers(timeFileUrl, times);
+    if (status != OK)
     {
         clusters.setSize(0, 0);
-        return COUNT_ERROR;
+        return status;
     }
+    nbSpikes = times.size();
 
-    //should not happen, but just in case
     if (nbSpikes == 0)
     {
         clusters.setSize(0, 0);
@@ -97,108 +115,30 @@ int ClustersProvider::loadData()
         return OK;
     }
 
-    RestartTimer();
-
-    //Create a reader on the clusterFile
-    QFile clusterFile(fileName);
-    bool status = clusterFile.open(QIODevice::ReadOnly);
-    if (!status)
+    //The .clu file holds the number of clusters followed by the cluster id of each spike.
+    QVector<dataType> clusterValues;
+    status = readIntegers(fileName, clusterValues);
+    if (status == OK && clusterValues.size() != nbSpikes + 1)
+        status = INCORRECT_CONTENT;
+    if (status != OK)
     {
         clusters.setSize(0, 0);
-        return OPEN_ERROR;
+        return status;
     }
+    nbClusters = static_cast<int>(clusterValues[0]);
 
-    //Set the size of the Array containing the spikes and clusters ids.
+    //First row: cluster ids, second row: spike times.
     clusters.setSize(2, nbSpikes);
-
-    //Get the number of clusters stored on the first line.
-    QString sNbClusters;
-    QByteArray buf;
-    buf.resize(255);
-    int ret = clusterFile.readLine(buf.data(), 255);
-    sNbClusters = QString::fromLatin1(buf, ret);
-
-
-    nbClusters = sNbClusters.toInt();
     //This map is used as an easy way to compute the unique list of cluster ids
     QMap<int, long> ids;
-    QByteArray buffer = clusterFile.readAll();
-    uint size = buffer.size();
-
-    //The buffer is read and each dataType is build char by char into a string. When the char read
-    //is not [1-9] (<=> blank space or a new line), the string is converted into a dataType and store
-    //into the first row of clusters.
-    //string of character which will contains the current seek dataType
-    dataType k = 0;
-    int l = 0;
-    char clusterID[255];
-    for (uint i = 0; i < size; ++i)
+    for (long i = 1; i <= nbSpikes; ++i)
     {
-        if (buffer[i] >= '0' && buffer[i] <= '9')
-        {
-            clusterID[l++] = buffer[i];
-        }
-        else if (l)
-        {
-            clusterID[l] = '\0';
-            long id = atol(clusterID);
-            clusters[k++] = id; //Warning if the typedef dataType changes, change will have to be made here.
-            ids.insert(static_cast<int>(id), id);
-            l = 0;
-        }
+        const dataType id = clusterValues[i];
+        clusters(1, i) = id;
+        clusters(2, i) = times[i - 1];
+        ids.insert(static_cast<int>(id), id);
     }
-
-    clusterFile.close();
     clusterIds = ids.keys();
-
-    //The number of spikes read has to be coherent with the number of spikes computed by wc -l (via Utilities::getNbLines).
-    if (k != nbSpikes)
-    {
-        clusters.setSize(0, 0);
-        return INCORRECT_CONTENT;
-    }
-
-    //Get the spikes time
-
-    //Create a reader on the spikeFile
-    QFile spikeFile(timeFilePath);
-    status = spikeFile.open(QIODevice::ReadOnly);
-    if (!status)
-    {
-        clusters.setSize(0, 0);
-        return OPEN_ERROR;
-    }
-
-
-    QByteArray spikeBuffer = spikeFile.readAll();
-    size = spikeBuffer.size();
-
-    //The buffer is read and each dataType is build char by char into a string. When the char read
-    //is not [1-9] (<=> blank space or a new line), the string is converted into a dataType and store
-    //into the second row of clusters.
-    //string of character which will contains the current seek dataType
-    l = 0;
-    char time[255];
-    for (uint i = 0; i < size; ++i)
-    {
-        if (spikeBuffer[i] >= '0' && spikeBuffer[i] <= '9')
-            time[l++] = spikeBuffer[i];
-        else if (l)
-        {
-            time[l] = '\0';
-            clusters[k++] = atol(time); //Warning if the typedef dataType changes, change will have to be made here.
-            l = 0;
-        }
-    }
-
-    spikeFile.close();
-
-    //The number of spikes read has to be coherent with the number of spikes computed by wc -l (via Utilities::getNbLines).
-    if (k != (2 * nbSpikes))
-    {
-        clusters.setSize(0, 0);
-        return INCORRECT_CONTENT;
-    }
 
     qDebug() << "Loading clu file into memory: " << Timer() << "\n";
 

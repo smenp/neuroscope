@@ -45,7 +45,6 @@ class ClustersProvider : public DataProvider
         OK = 0,
         OPEN_ERROR = 1,
         MISSING_FILE = 3,
-        COUNT_ERROR = 4,
         INCORRECT_CONTENT = 5
     };
 

@@ -224,6 +224,36 @@ class TestClustersProvider : public QObject
         QCOMPARE(shortClu.loadData(), int(ClustersProvider::INCORRECT_CONTENT));
     }
 
+    void incorrectContent_data()
+    {
+        QTest::addColumn<QString>("clu");
+        QTest::addColumn<QString>("res");
+
+        QTest::newRow("more cluster ids than spike times") << "1\n1\n1\n1\n" << "10\n";
+        QTest::newRow("cluster id longer than 255 characters") << "1\n" + QString(300, '1') + "\n" << "10\n";
+        QTest::newRow("spike time longer than 255 characters") << "1\n1\n" << QString(300, '1') + "\n";
+        QTest::newRow("spike time not an integer") << "1\n1\n" << "1.5\n";
+    }
+
+    void incorrectContent()
+    {
+        QFETCH(QString, clu);
+        QFETCH(QString, res);
+        writeTextFile(path("incorrect.clu.6"), clu);
+        writeTextFile(path("incorrect.res.6"), res);
+        ClustersProvider provider(path("incorrect.clu.6"), SAMPLING_RATE, SAMPLING_RATE, 0);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::INCORRECT_CONTENT));
+    }
+
+    void lastLineWithoutNewline()
+    {
+        writeTextFile(path("nonewline.clu.7"), "2\n1\n2");
+        writeTextFile(path("nonewline.res.7"), "10\n20");
+        ClustersProvider provider(path("nonewline.clu.7"), SAMPLING_RATE, SAMPLING_RATE, 0);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
+        QCOMPARE(provider.clusterIdList(), QList<int>({1, 2}));
+    }
+
     void readWindow_data()
     {
         QTest::addColumn<std::int64_t>("startTime");
