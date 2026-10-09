@@ -186,6 +186,10 @@ class EventsProvider : public DataProvider
     {
         currentSamplingRate = static_cast<double>(rate / 1000.0);
 
+        //A file without events has no time to start from: it keeps the variables set when it was emptied.
+        if (nbEvents == 0)
+            return;
+
         //Initialize the variables
         previousStartTime = 0;
         previousStartIndex = 1;

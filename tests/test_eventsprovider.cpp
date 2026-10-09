@@ -324,6 +324,18 @@ class TestEventsProvider : public QObject
         QCOMPARE(previous.startingTime, 500_i64);
     }
 
+    // The sampling rate of a file without events can change; the file stays empty.
+    void changeTheSamplingRateOfAFileWithoutEvents()
+    {
+        EventsProvider provider(path("empty.emp.evt"), 20000.0);
+        QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+
+        provider.updateSamplingRate(1250.0);
+
+        QCOMPARE(provider.getNbEvents(), 0);
+        QVERIFY(request(provider, 0, 1000).times.isEmpty());
+    }
+
     void saveRoundTrip()
     {
         EventsProvider provider(path("many.abc.evt"), 20000.0);
