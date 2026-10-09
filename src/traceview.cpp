@@ -5159,7 +5159,10 @@ void TraceView::nextClusterDataAvailable(Array<dataType>& data, QObject* initiat
     else
         clusterData->setStatus(true);
 
-    if (nextClusterProvider.first.isEmpty() || (!nextClusterProvider.first.isEmpty() && startingTimeInRecordingUnits < startTimeInRecordingUnits))
+    //A provider which found no spike returns the current start: it is chosen only if no provider found one.
+    if (nextClusterProvider.first.isEmpty() ||
+        (startingTimeInRecordingUnits != previousStartTimeInRecordingUnits &&
+         (startingTimeInRecordingUnits < startTimeInRecordingUnits || startTimeInRecordingUnits == previousStartTimeInRecordingUnits)))
     {
         nextClusterProvider.first = providerName;
         nextClusterProvider.second = startingTime;

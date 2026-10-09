@@ -86,6 +86,29 @@ inline QString writeRecording(const QDir& dir, const QString& baseName, int nbCh
     return datPath;
 }
 
+/** A spike of a cluster file. */
+struct Spike
+{
+    std::int64_t time; // in samples
+    int cluster;
+};
+
+/** Writes @p baseName.clu.@p id and @p baseName.res.@p id into @p dir and returns the path of the .clu file. */
+inline QString writeClusterFile(const QDir& dir, const QString& baseName, int id, const QList<Spike>& spikes)
+{
+    QString clu = "3\n";
+    QString res;
+    for (const Spike& spike: spikes)
+    {
+        clu += QString::number(spike.cluster) + "\n";
+        res += QString::number(spike.time) + "\n";
+    }
+    writeTextFile(dir.filePath(QString("%1.res.%2").arg(baseName).arg(id)), res);
+    const QString cluPath = dir.filePath(QString("%1.clu.%2").arg(baseName).arg(id));
+    writeTextFile(cluPath, clu);
+    return cluPath;
+}
+
 /**
  * Keeps the settings and recent files of the tests apart from the user's: QSettings() reads and writes INI files in
  * a directory of the test process on every platform, instead of the user's configuration or the Windows registry.
