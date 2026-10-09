@@ -1234,6 +1234,7 @@ void ChannelPalette::moveChannels(int targetGroup)
     QList<int> movedChannels;
     QList<int> movedFromTrashChannels;
     QPainter painter;
+    const int firstMovedRow = iconView->count();
     QHashIterator<QString, ChannelIconView*> it(iconviewDict);
     while (it.hasNext())
     {
@@ -1256,7 +1257,7 @@ void ChannelPalette::moveChannels(int targetGroup)
                 movedChannels.append(channelId);
                 currentMovedChannels.append(channelId);
 
-                //Add the channel to the trash group
+                //Add the channel to the target group
                 QPixmap pixmap(14, 14);
                 QColor color = channelColors->color(channelId);
                 drawItem(painter, &pixmap, color, channelsShowHideStatus[channelId], channelsSkipStatus[channelId]);
@@ -1283,6 +1284,13 @@ void ChannelPalette::moveChannels(int targetGroup)
         groupsChannels->insert(it.key().toInt(), channelIds);
 
         //it.value()->arrangeItemsInGrid();
+    }
+
+    //The moved channels stay selected
+    if (iconView->count() > firstMovedRow)
+    {
+        const QItemSelection moved(iconView->model()->index(firstMovedRow, 0), iconView->model()->index(iconView->count() - 1, 0));
+        iconView->selectionModel()->select(moved, QItemSelectionModel::Select);
     }
 
     //Add/update the group entry in the map group-channel list
