@@ -288,7 +288,7 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
             emit dataReady(data, initiator);
             return;
         }
-        Array<dataType> retrieveData(nbSamples, nbChannels);
+        Array<int32_t> retrieveData(nbSamples, nbChannels);
         qint64 nbValues = nbSamples * nbChannels;
         qint64 position = static_cast<qint64>(static_cast<qint64>(startInRecordingUnits) * static_cast<qint64>(nbChannels));
 

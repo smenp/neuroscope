@@ -198,6 +198,7 @@ class TestTracesProvider : public QObject
         // The recording length is truncated to whole milliseconds, so the last sample lies within the last millisecond:
         // at 3 kHz, 2000 samples last 666.7 ms and the last sample is at 666.3 ms.
         QTest::newRow("16 bit .dat") << "session.dat" << 4 << 16 << 3000.0 << 600_i64 << 1800_i64 << 200_i64;
+        QTest::newRow("32 bit .dat") << "session32.dat" << 4 << 32 << 3000.0 << 600_i64 << 1800_i64 << 200_i64;
         // At 30 kHz, 1536 samples last 51.2 ms and the last sample is at 51.17 ms.
         QTest::newRow(".ncs") << "End1.ncs" << 2 << 16 << 30000.0 << 40_i64 << 1200_i64 << 336_i64;
     }
@@ -219,7 +220,13 @@ class TestTracesProvider : public QObject
         QCOMPARE(data.rows, nbSamples);
         QCOMPARE(data.cols, std::int64_t(nbChannels));
         const auto raw = [&](std::int64_t sample, int channel) -> std::int64_t
-        { return file.endsWith(".ncs") ? rawNcs(sample, channel) : raw16(sample, channel); };
+        {
+            if (resolution == 32)
+            {
+                return raw32(sample, channel);
+            }
+            return file.endsWith(".ncs") ? rawNcs(sample, channel) : raw16(sample, channel);
+        };
         for (std::int64_t s = 0; s < nbSamples; ++s)
             for (int c = 0; c < nbChannels; ++c)
                 QCOMPARE(data(s + 1, c + 1), roundHalfAway(raw(firstSample + s, c) * gain(resolution)));
@@ -257,8 +264,6 @@ class TestTracesProvider : public QObject
         for (std::int64_t s = 0; s < 10; ++s)
             for (int c = 0; c < 4; ++c)
                 expected.append(roundHalfAway(raw32(100 + s, c) * gain(32)));
-        if (sizeof(dataType) != sizeof(std::int32_t))
-            QEXPECT_FAIL("", "32 bit samples are read into an array of long, which has 64 bits on Linux and macOS (#13)", Abort);
         QCOMPARE(data.values, expected);
     }
 
