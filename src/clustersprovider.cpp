@@ -470,8 +470,8 @@ void ClustersProvider::requestNextClusterData(long startTime, long timeFrame, co
 
     if (startTime > fileMaxTime)
     {
-        //Send the information to the receiver.
-        emit dataReady(data, initiator, name);
+        //No spike after the last one: return startTime as the startingTime, as when no spike is found.
+        emit nextClusterDataReady(data, initiator, name, initialStartTime, startTimeInRecordingUnits);
         return;
     }
 

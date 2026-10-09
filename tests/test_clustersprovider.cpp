@@ -359,6 +359,22 @@ class TestClustersProvider : public QObject
         QCOMPARE(sparsePrevious.startingTime, 0_i64);
         QCOMPARE(describe(sparsePrevious.data), QString("(2000, 2)"));
     }
+
+    // Past its last spike a file answers the request for the next spike with no spike, leaving the window where it is.
+    void nextClusterAfterTheLastSpike()
+    {
+        ClustersProvider provider(path("few.clu.2"), SAMPLING_RATE, SAMPLING_RATE, 100000, 25);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
+
+        int windowsSent = 0;
+        connect(&provider, &ClustersProvider::dataReady, [&](Array<dataType>&, QObject*, QString)
+                { ++windowsSent; });
+        const Result next = requestNext(provider, 3000, 1000, { 2, 3 }, 60000);
+        QCOMPARE(windowsSent, 0);
+        QVERIFY(next.data.isEmpty());
+        QCOMPARE(next.startingTime, 3000_i64);
+        QCOMPARE(next.startingTimeInRecordingUnits, 60000_i64);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestClustersProvider)
