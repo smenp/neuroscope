@@ -95,6 +95,12 @@ class TestTracesProvider : public QObject
         // Zero-padded channel numbers.
         writeFile(path("TT01.ncs"), ncsFile(1500, [](std::int64_t s) { return rawNcs(s, 0); }));
         writeFile(path("TT02.ncs"), ncsFile(1500, [](std::int64_t s) { return rawNcs(s, 1); }));
+        // Three full records.
+        writeFile(path("End1.ncs"), ncsFile(1536, [](std::int64_t s) { return rawNcs(s, 0); }));
+        writeFile(path("End2.ncs"), ncsFile(1536, [](std::int64_t s) { return rawNcs(s, 1); }));
+        // 10518359 samples of 4 channels: 525917.95 ms at 20 kHz, which single precision rounds to 525918 ms.
+        QFile longFile(path("long.dat"));
+        QVERIFY(longFile.open(QIODevice::WriteOnly) && longFile.resize(10518359 * 4 * sizeof(std::int16_t)));
     }
 
     void recordingLength_data()
@@ -112,6 +118,7 @@ class TestTracesProvider : public QObject
         // Lengths are truncated to whole milliseconds.
         QTest::newRow("20 kHz") << "session.dat" << 16 << 20000.0 << 100_i64 << 2000_i64;
         QTest::newRow("non-integer duration") << "session.dat" << 16 << 3000.0 << 666_i64 << 1998_i64;
+        QTest::newRow("long recording") << "long.dat" << 16 << 20000.0 << 525917_i64 << 10518340_i64;
     }
 
     void recordingLength()
@@ -176,6 +183,46 @@ class TestTracesProvider : public QObject
         for (std::int64_t s = 0; s < nbSamples; ++s)
             for (int c = 0; c < 4; ++c)
                 QCOMPARE(data(s + 1, c + 1), roundHalfAway(raw16(firstSample + s, c) * gain(16)));
+    }
+
+    void readTheEndOfTheRecording_data()
+    {
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<int>("nbChannels");
+        QTest::addColumn<int>("resolution");
+        QTest::addColumn<double>("samplingRate");
+        QTest::addColumn<std::int64_t>("startTime");
+        QTest::addColumn<std::int64_t>("firstSample");
+        QTest::addColumn<std::int64_t>("nbSamples");
+
+        // The recording length is truncated to whole milliseconds, so the last sample lies within the last millisecond:
+        // at 3 kHz, 2000 samples last 666.7 ms and the last sample is at 666.3 ms.
+        QTest::newRow("16 bit .dat") << "session.dat" << 4 << 16 << 3000.0 << 600_i64 << 1800_i64 << 200_i64;
+        // At 30 kHz, 1536 samples last 51.2 ms and the last sample is at 51.17 ms.
+        QTest::newRow(".ncs") << "End1.ncs" << 2 << 16 << 30000.0 << 40_i64 << 1200_i64 << 336_i64;
+    }
+
+    // A window ending at the recording length ends with the last sample of the recording.
+    void readTheEndOfTheRecording()
+    {
+        QFETCH(QString, file);
+        QFETCH(int, nbChannels);
+        QFETCH(int, resolution);
+        QFETCH(double, samplingRate);
+        QFETCH(std::int64_t, startTime);
+        QFETCH(std::int64_t, firstSample);
+        QFETCH(std::int64_t, nbSamples);
+
+        TracesProvider provider(path(file), nbChannels, resolution, VOLTAGE_RANGE, AMPLIFICATION, samplingRate, 0);
+        const Matrix data = request(provider, startTime, provider.recordingLength());
+
+        QCOMPARE(data.rows, nbSamples);
+        QCOMPARE(data.cols, std::int64_t(nbChannels));
+        const auto raw = [&](std::int64_t sample, int channel) -> std::int64_t
+        { return file.endsWith(".ncs") ? rawNcs(sample, channel) : raw16(sample, channel); };
+        for (std::int64_t s = 0; s < nbSamples; ++s)
+            for (int c = 0; c < nbChannels; ++c)
+                QCOMPARE(data(s + 1, c + 1), roundHalfAway(raw(firstSample + s, c) * gain(resolution)));
     }
 
     void gainUsesResolution()
