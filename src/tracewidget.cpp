@@ -251,7 +251,6 @@ void TraceWidget::initSelectionWidgets()
     lay->addWidget(duration);
     duration->setMinimumSize(50, duration->minimumHeight());
     duration->setMaximumSize(50, duration->maximumHeight());
-    duration->setMaxLength(5);
     //duration will only accept integers between 0 and a max equal
     //to maximum of time for the current document (set when the document will be opened)
     duration->setValidator(&validator);

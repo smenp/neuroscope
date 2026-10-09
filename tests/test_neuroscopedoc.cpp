@@ -15,6 +15,8 @@
  ***************************************************************************/
 
 #include "apptestutils.h"
+#include "neuroscopeview.h"
+#include "tracewidget.h"
 
 #include <QAction>
 #include <QLineEdit>
@@ -113,6 +115,23 @@ class TestNeuroscopeDoc : public QObject
         QCOMPARE(messages.texts, QStringList());
     }
 
+    // The duration can be typed up to the length of the recording.
+    void typeALongDuration()
+    {
+        const double samplingRate = 1250;
+        const long duration = 123456;
+        const QString datPath = writeRecording(QDir(dir.path()), "long", 1, samplingRate, 200 * 1250);
+        auto app = testutils::openRecording(datPath);
+        QLineEdit* durationEdit = app->findChild<TraceWidget*>()->findChild<QLineEdit*>();
+        QVERIFY(durationEdit);
+
+        durationEdit->clear();
+        QTest::keyClicks(durationEdit, QString::number(duration));
+        QTest::keyClick(durationEdit, Qt::Key_Return);
+
+        QCOMPARE(app->activeView()->getTimeWindow(), duration);
+    }
+
     void closeWithTheFocusInTheStartTime_data()
     {
         QTest::addColumn<QString>("closing");
@@ -173,4 +192,3 @@ class TestNeuroscopeDoc : public QObject
 
 QTEST_MAIN(TestNeuroscopeDoc)
 #include "test_neuroscopedoc.moc"
-#include "tracewidget.h"
