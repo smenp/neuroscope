@@ -3582,6 +3582,10 @@ void NeuroscopeApp::slotCloseEventFile()
         ItemPalette* eventPalette = static_cast<ItemPalette*>(current);
 
         NeuroscopeView* view = activeView();
+        // The active view leaves the add-event mode as if the Select tool were chosen, the others in
+        // NeuroscopeView::removeEventProvider().
+        if (view->isAddingEventsTo(eventProvider))
+            slotSelect();
         if (eventFileList.count() == 1)
             doc->removeEventFile(eventProvider, view, true);
         else

@@ -23,9 +23,12 @@
 #include "neuroscope.h"
 #include "neuroscopedoc.h"
 
+#include <QApplication>
 #include <QDir>
+#include <QFileDialog>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include <cstdint>
 #include <memory>
@@ -98,6 +101,20 @@ inline std::unique_ptr<NeuroscopeApp> openRecording(const QString& datPath)
     app->show();
     app->openDocumentFile(datPath);
     return app;
+}
+
+/** Calls @p loadSlot of @p app, which asks for files, and answers with @p path. */
+inline void loadFile(NeuroscopeApp* app, const char* loadSlot, const QString& path)
+{
+    QTimer::singleShot(0, [path]
+                       {
+        QFileDialog* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        if (!dialog)
+            qFatal("No file dialog to answer with %s", qPrintable(path));
+        dialog->setDirectory(QFileInfo(path).absolutePath());
+        dialog->selectFile(QFileInfo(path).fileName());
+        QMetaObject::invokeMethod(dialog, "accept"); });
+    QMetaObject::invokeMethod(app, loadSlot);
 }
 
 } // namespace testutils
