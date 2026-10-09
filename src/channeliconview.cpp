@@ -78,6 +78,7 @@ ChannelIconView::ChannelIconView(const QColor& backgroundColor, int gridX, int g
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     connect(model(), SIGNAL(rowsInserted(QModelIndex, int, int)), this, SIGNAL(rowInsered()));
+    connect(model(), SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SIGNAL(rowInsered()));
 }
 
 

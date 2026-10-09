@@ -30,9 +30,7 @@
 namespace
 {
 
-const int NB_CHANNELS = 10;
-
-/** Initial grouping, identical in both palettes: group id -> channel ids (group 0 is the trash). */
+/** Default grouping, identical in both palettes: group id -> channel ids (group 0 is the trash). */
 QMap<int, QList<int>> initialGroups()
 {
     return { { 0, { 8, 9 } }, { 1, { 0, 1, 2, 3 } }, { 2, { 4, 5, 6, 7 } } };
@@ -47,22 +45,27 @@ QMap<int, int> channelsToGroups(const QMap<int, QList<int>>& groups)
     return result;
 }
 
-/** The two palettes of the main window, wired to each other the way the application wires them. */
+/** The two palettes of the main window, wired to each other the way the application wires them.
+ * The channels of groups are numbered from 0 without gaps.*/
 struct Palettes
 {
     QWidget window;
     ChannelColors colors;
     QStringList labels;
-    QMap<int, QList<int>> displayGroups = initialGroups();
-    QMap<int, int> displayChannels = channelsToGroups(displayGroups);
-    QMap<int, QList<int>> spikeGroups = initialGroups();
-    QMap<int, int> spikeChannels = channelsToGroups(spikeGroups);
+    QMap<int, QList<int>> displayGroups;
+    QMap<int, int> displayChannels;
+    QMap<int, QList<int>> spikeGroups;
+    QMap<int, int> spikeChannels;
     ChannelPalette* display;
     ChannelPalette* spike;
 
-    Palettes()
+    explicit Palettes(const QMap<int, QList<int>>& groups = initialGroups())
+        : displayGroups(groups),
+          displayChannels(channelsToGroups(groups)),
+          spikeGroups(groups),
+          spikeChannels(channelsToGroups(groups))
     {
-        for (int channel = 0; channel < NB_CHANNELS; ++channel)
+        for (int channel = 0; channel < displayChannels.size(); ++channel)
         {
             colors.append(channel, Qt::red, Qt::green, Qt::blue);
             labels << QString::number(channel);
@@ -171,6 +174,19 @@ void dragOnto(ChannelPalette* palette, int byChannel, int ontoChannel)
     drag(palette, byChannel, target, target->visualItemRect(onto).center());
 }
 
+int lastItemBottom(ChannelIconView* view)
+{
+    return view->visualItemRect(view->item(view->count() - 1)).bottom();
+}
+
+/** Height of a group box below the bottom of its last channel. */
+int spaceBelowChannels(ChannelPalette* palette, int id)
+{
+    ChannelIconView* view = group(palette, id);
+    QWidget* box = view->parentWidget();
+    return box->height() - view->viewport()->mapTo(box, QPoint(0, lastItemBottom(view))).y();
+}
+
 } // namespace
 
 class TestChannelPalette : public QObject
@@ -200,7 +216,7 @@ class TestChannelPalette : public QObject
                 all << ids;
             }
             std::sort(all.begin(), all.end());
-            QList<int> expected(NB_CHANNELS);
+            QList<int> expected(palettes->labels.size());
             std::iota(expected.begin(), expected.end(), 0);
             QCOMPARE(all, expected);
         }
@@ -319,6 +335,30 @@ class TestChannelPalette : public QObject
         QList<int> moved = shown(palettes->display, 3);
         std::sort(moved.begin(), moved.end());
         QCOMPARE(moved, (QList<int>{ 1, 6 }));
+    }
+
+    void groupsShrinkWhenChannelsLeave()
+    {
+        ChannelIconView* view = group(palettes->display, 1);
+        const int perRow = view->viewport()->width() / view->gridSize().width();
+        // Groups several rows high, so that moving channels out of one removes rows.
+        const int perGroup = 4 * perRow;
+        QMap<int, QList<int>> groups;
+        for (int channel = 0; channel < 2 * perGroup + 2; ++channel)
+            groups[channel < 2 * perGroup ? channel / perGroup + 1 : 0] << channel;
+        palettes = std::make_unique<Palettes>(groups);
+        palettes->window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&palettes->window));
+        ChannelIconView* source = group(palettes->display, 1);
+        const int sourceBottom = lastItemBottom(source);
+        QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
+
+        select(palettes->display, groups[1].mid(1));
+        palettes->display->createGroup();
+        verifyConsistent();
+        QVERIFY(lastItemBottom(source) < sourceBottom);
+        // Nothing guarantees a repaint of the palette will follow, so the groups must already fit.
+        QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
     }
 
     void shiftClickSelectsRange()
