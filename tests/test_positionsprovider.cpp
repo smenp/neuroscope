@@ -147,6 +147,7 @@ class TestPositionsProvider : public QObject
 
         QTest::newRow("inconsistent lines") << "1 2\n3 4 5\n6 7\n";
         QTest::newRow("not a number") << "1 2\n3 -\n";
+        QTest::newRow("odd number of coordinates") << "1 2 3\n4 5 6\n";
         QTest::newRow("out of range") << "1 2\n3 1e300\n";
         QTest::newRow("empty line") << "1 2\n\n3 4\n";
         QTest::newRow("line without values") << "1 2\nnan nan\n3 4\n";

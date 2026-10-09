@@ -63,7 +63,8 @@ int PositionsProvider::loadData()
 
     RestartTimer();
 
-    //Each non-empty line holds one position, with as many coordinates as the first one.
+    //Each non-empty line holds one position: the (x, y) coordinates of one or more spots, as many as on
+    //the first line.
     QVector<dataType> values;
     nbCoordinates = 0;
     int nbValuesInLine = 0;
@@ -88,7 +89,7 @@ int PositionsProvider::loadData()
             return consistent;
         });
     positionFile.close();
-    if (!read)
+    if (!read || nbCoordinates % 2 != 0)
         return fail(INCORRECT_CONTENT);
 
     nbPositions = nbCoordinates == 0 ? 0 : values.size() / nbCoordinates;
