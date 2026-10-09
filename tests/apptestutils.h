@@ -54,11 +54,17 @@ inline QString parameterFile(int nbChannels, double samplingRate)
   <amplification>1000</amplification>
   <offset>0</offset>
  </acquisitionSystem>
+ <fieldPotentials>
+  <lfpSamplingRate>1250</lfpSamplingRate>
+ </fieldPotentials>
  <anatomicalDescription>
   <channelGroups>
    <group>%3</group>
   </channelGroups>
  </anatomicalDescription>
+ <spikeDetection>
+  <channelGroups/>
+ </spikeDetection>
 </parameters>
 )")
         .arg(nbChannels)

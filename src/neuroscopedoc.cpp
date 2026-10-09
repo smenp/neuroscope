@@ -56,6 +56,17 @@
 #include "cerebustraceprovider.h"
 #endif
 
+namespace
+{
+
+/** Whether the file of @p fileInfo differs in modification time from @p lastModified, which a session file stores to the second. */
+bool isModifiedSince(const QFileInfo& fileInfo, const QDateTime& lastModified)
+{
+    return fileInfo.lastModified().toSecsSinceEpoch() != lastModified.toSecsSinceEpoch();
+}
+
+} // namespace
+
 extern QString version;
 
 NeuroscopeDoc::NeuroscopeDoc(QWidget* parent, ChannelPalette& displayChannelPalette, ChannelPalette& spikeChannelPalette, int channelNbDefault,
@@ -2631,7 +2642,7 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadClusterFileForSess
 
     bool modified = false;
     //check if the file has been modified since the last session.
-    if (fileInfo.lastModified() != lastModified)
+    if (isModifiedSince(fileInfo, lastModified))
         modified = true;
 
     ClustersProvider* clustersProvider = new ClustersProvider(clusterUrl, datSamplingRate, samplingRate, tracesProvider->getTotalNbSamples(), clusterPosition);
@@ -2899,7 +2910,7 @@ NeuroscopeDoc::OpenSaveCreateReturnMessage NeuroscopeDoc::loadEventFileForSessio
     }
 
     bool modified = false;
-    if (fileInfo.lastModified() != lastModified)
+    if (isModifiedSince(fileInfo, lastModified))
         modified = true;
 
     EventsProvider* eventsProvider = new EventsProvider(eventUrl, samplingRate, eventPosition);
