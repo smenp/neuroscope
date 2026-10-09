@@ -77,6 +77,22 @@ class TestItemPalette : public QObject
             QCOMPARE(metrics.elidedText(label, Qt::ElideRight, textWidth), label);
         }
     }
+
+    void groupsAreAdjustedOncePerList()
+    {
+        const auto adjustmentsToCreate = [](int nbItems)
+        {
+            ClusterColors colors;
+            for (int id = 0; id < nbItems; ++id)
+                colors.append(id, Qt::red);
+            ItemPalette palette(ItemPalette::CLUSTER, Qt::black);
+            QSignalSpy adjustments(&palette, &ItemPalette::paletteResized);
+            palette.createItemList(&colors, GROUP, 0);
+            QCoreApplication::processEvents();
+            return adjustments.count();
+        };
+        QCOMPARE(adjustmentsToCreate(3), adjustmentsToCreate(1));
+    }
 };
 
 QTEST_MAIN(TestItemPalette)

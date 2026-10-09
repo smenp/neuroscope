@@ -329,6 +329,22 @@ class TestChannelPalette : public QObject
         QVERIFY(lastItemBottom(source) < sourceBottom);
         QCOMPARE(spaceBelowChannels(palettes->display, 1), spaceBelowChannels(palettes->display, 2));
     }
+
+    void groupsAreAdjustedOncePerMove()
+    {
+        palettes->window.hide();
+        QSignalSpy adjustments(palettes->display, &ChannelPalette::paletteResized);
+        const auto adjustmentsToMove = [&](const QList<int>& channels)
+        {
+            select(palettes->display, channels);
+            adjustments.clear();
+            palettes->display->createGroup();
+            QCoreApplication::processEvents();
+            return adjustments.count();
+        };
+        QCOMPARE(adjustmentsToMove({ 0, 1, 2 }), adjustmentsToMove({ 4 }));
+        verifyConsistent();
+    }
 };
 
 QTEST_MAIN(TestChannelPalette)

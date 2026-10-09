@@ -45,6 +45,9 @@ ChannelPalette::ChannelPalette(PaletteType type, const QColor& backgroundColor, 
 {
     setObjectName(name);
     setWidgetResizable(true);
+    adjustSizeTimer.setSingleShot(true);
+    adjustSizeTimer.setInterval(0);
+    connect(&adjustSizeTimer, &QTimer::timeout, this, [this]() { emit paletteResized(viewport()->width(), labelSize); });
     //Set the palette color, the foreground color depends on the background color
     int h;
     int s;
@@ -990,7 +993,7 @@ void ChannelPalette::createGroup(int id)
 
 void ChannelPalette::slotRowInsered()
 {
-    emit paletteResized(viewport()->width(), labelSize);
+    adjustSizeTimer.start();
 }
 
 void ChannelPalette::groupToMove(int sourceId, int targetId, int start, int destination)

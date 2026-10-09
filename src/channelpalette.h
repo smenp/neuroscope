@@ -38,6 +38,7 @@
 #include "channelgroupview.h"
 #include "channeliconview.h"
 #include <QScrollArea>
+#include <QTimer>
 
 // forward declaration
 class ChannelColors;
@@ -223,6 +224,10 @@ class ChannelPalette : public QScrollArea
 
     /**True if a group has to be removed because all its channels have been removed.*/
     bool isGroupToRemove;
+
+    /**Adjusts the size of the groups once for all the items inserted or removed since the last call
+     * to the event loop: each adjustment lays out every item of the groups.*/
+    QTimer adjustSizeTimer;
 
     /**Type of the palette usage: display or spike.*/
     PaletteType type;
