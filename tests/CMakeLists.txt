@@ -39,5 +39,6 @@ neuroscope_add_app_test(test_recordingend)
 neuroscope_add_app_test(test_itempalette)
 neuroscope_add_app_test(test_channelpalette)
 # The offscreen platform refuses every drag; the minimal one runs drag and drop inside the process.
+# Its fonts are needed to size the group labels from the font metrics.
 set_tests_properties(test_channelpalette PROPERTIES ENVIRONMENT
-    "QT_QPA_PLATFORM=minimal;QT_LOGGING_RULES=default.debug=false")
+    "QT_QPA_PLATFORM=minimal:enable_fonts;QT_LOGGING_RULES=default.debug=false")

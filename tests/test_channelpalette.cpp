@@ -21,6 +21,8 @@
 #include "widgettestutils.h"
 
 #include <QApplication>
+#include <QDrag>
+#include <QLabel>
 #include <QHBoxLayout>
 #include <QScrollBar>
 #include <QThread>
@@ -184,6 +186,31 @@ void dragOnto(ChannelPalette* palette, int byChannel, int ontoChannel)
     QListWidgetItem* onto = item(palette, ontoChannel);
     auto* target = static_cast<ChannelIconView*>(onto->listWidget());
     drag(palette, byChannel, target, target->visualItemRect(onto).center());
+}
+
+/** Box of a group: its label and its channels. */
+ChannelGroupView* box(ChannelPalette* palette, int id)
+{
+    return static_cast<ChannelGroupView*>(group(palette, id)->parentWidget());
+}
+
+/** Drags a group by its label and drops it at windowPos. Calls during(drag) while the group is dragged. */
+void dragGroup(ChannelPalette* palette, int id, const QPoint& windowPos, const std::function<void(QDrag*)>& during = {})
+{
+    QLabel* label = box(palette, id)->label();
+    QWindow* window = palette->window()->windowHandle();
+    const QPoint press = label->mapTo(label->window(), label->rect().center());
+    const auto release = [window, label, windowPos, during]()
+    {
+        if (during)
+            during(label->findChild<QDrag*>());
+        QTest::mouseMove(window, windowPos);
+        QTest::mouseRelease(window, Qt::LeftButton, {}, windowPos);
+    };
+    // The label starts the drag as soon as it is pressed; QDrag::exec() runs its own event loop.
+    QTimer::singleShot(0, window, release);
+    QTest::mousePress(window, Qt::LeftButton, {}, press);
+    QCoreApplication::processEvents();
 }
 
 int lastItemBottom(ChannelIconView* view)
@@ -455,6 +482,24 @@ class TestChannelPalette : public QObject
             QSKIP("The platform does not deliver wheel events to the window");
         QVERIFY(palettes->display->verticalScrollBar()->value() > 0);
 #endif
+    }
+
+    void dragGroupShowsItsLabel()
+    {
+        QLabel* label = box(palettes->display, 1)->label();
+        QVERIFY(!label->size().isEmpty());
+        QImage dragged;
+        QPoint hotSpot;
+        const QPoint press = label->mapTo(label->window(), label->rect().center());
+        dragGroup(palettes->display, 1, press,
+                  [&](QDrag* drag)
+                  {
+                      QVERIFY(drag);
+                      dragged = drag->pixmap().toImage();
+                      hotSpot = drag->hotSpot();
+                  });
+        QCOMPARE(dragged, label->grab().toImage());
+        QCOMPARE(hotSpot, label->rect().center());
     }
 
     void shiftClickSelectsRange()
