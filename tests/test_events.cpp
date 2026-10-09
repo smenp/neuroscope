@@ -21,6 +21,7 @@
 #include "traceview.h"
 
 #include <QAction>
+#include <QMouseEvent>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -52,6 +53,15 @@ void clickInTheTraces(NeuroscopeApp* app)
     QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, view->rect().center());
 }
 
+/** Selects the first event of the event file "abc", which is shown, with the Select Event tool. */
+void selectAnEvent(NeuroscopeApp* app)
+{
+    // The events of a file are numbered from 1 in the order of their descriptions.
+    app->activeView()->shownEventsUpdate("abc", { 1 });
+    QMetaObject::invokeMethod(app, "slotSelectEvent");
+    clickInTheTraces(app);
+}
+
 } // namespace
 
 class TestEvents : public QObject
@@ -61,13 +71,18 @@ class TestEvents : public QObject
   private:
     QTemporaryDir dir;
 
-    /** Opens a recording with the event file @p baseName.abc.evt loaded. */
-    std::unique_ptr<NeuroscopeApp> openWithEvents(const QString& baseName)
+    /** Opens a recording with the event file @p baseName.abc.evt loaded and, with @p otherFile, @p baseName.def.evt. */
+    std::unique_ptr<NeuroscopeApp> openWithEvents(const QString& baseName, bool otherFile)
     {
         const QString datPath = writeRecording(QDir(dir.path()), baseName, NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
         auto app = openRecording(datPath);
         writeTextFile(dir.filePath(baseName + ".abc.evt"), "5\t" + DESCRIPTION + "\n500\t" + DESCRIPTION + "\n");
         loadFile(app.get(), "slotLoadEventFiles", dir.filePath(baseName + ".abc.evt"));
+        if (otherFile)
+        {
+            writeTextFile(dir.filePath(baseName + ".def.evt"), "900\t" + DESCRIPTION + "\n");
+            loadFile(app.get(), "slotLoadEventFiles", dir.filePath(baseName + ".def.evt"));
+        }
         return app;
     }
 
@@ -89,7 +104,7 @@ class TestEvents : public QObject
     void closeTheFileEventsAreAddedTo()
     {
         QFETCH(bool, inactiveView);
-        auto app = openWithEvents(QString("adding-%1").arg(QTest::currentDataTag()).replace(' ', '-'));
+        auto app = openWithEvents(QString("adding-%1").arg(QTest::currentDataTag()).replace(' ', '-'), false);
         app->findChild<ItemPalette*>("eventPanel")->selectGroup("abc");
         NeuroscopeView* adding = app->activeView();
         const QString added = "added";
@@ -109,6 +124,39 @@ class TestEvents : public QObject
         displayTabs->setCurrentWidget(adding);
         clickInTheTraces(app.get());
         QVERIFY(adding->isSelectionTool());
+    }
+
+    void editASelectedEventAfterItsFileIsClosed_data()
+    {
+        QTest::addColumn<bool>("drag");
+        QTest::newRow("remove") << false;
+        QTest::newRow("drag") << true;
+    }
+
+    // An event stays selected while its file is closed; removing or dragging it must not reach the closed file.
+    void editASelectedEventAfterItsFileIsClosed()
+    {
+        QFETCH(bool, drag);
+        auto app = openWithEvents(QString("selected-") + QTest::currentDataTag(), true);
+        selectAnEvent(app.get());
+
+        QMetaObject::invokeMethod(app.get(), "slotEventGroupSelected", Q_ARG(QString, "abc"));
+        closeSelectedEventFile(app.get());
+
+        if (drag)
+        {
+            TraceView* view = app->findChild<TraceView*>();
+            const QPoint from = view->rect().center();
+            const QPoint to = from + QPoint(10, 0);
+            QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, from);
+            QMouseEvent move(QEvent::MouseMove, to, view->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view, &move);
+            QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, to);
+        }
+        else
+        {
+            QMetaObject::invokeMethod(app.get(), "removeEvent");
+        }
     }
 };
 
