@@ -34,6 +34,17 @@
 //include files for c/c++ libraries
 #include <math.h>
 
+#include <algorithm>
+
+namespace
+{
+// Neuralynx .ncs files: a text header, then records of a header (timestamp, channel number, sampling
+// frequency and number of valid samples) and a fixed number of samples.
+const int NCS_HEADER_SIZE = 16 * 1024;
+const int NCS_RECORD_HEADER_SIZE = 20;
+const int NCS_SAMPLES_PER_RECORD = 512;
+} // namespace
+
 TracesProvider::TracesProvider(const QString& fileUrl, int nbChannels, int resolution, int voltageRange, int amplification, double samplingRate, int offset)
     : DataProvider(fileUrl),
       nbChannels(nbChannels),
@@ -123,24 +134,8 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
             qDebug() << "NCS";
             /// Modified by M.Zugaro to read Neuralynx ncs format
 
-            // Neuralynx headers
-            char fileHeader[16 * 1024];
-            char recordHeader[20];
-            const int nSamplesPerRecord = 512;
-            int16_t buffer[nSamplesPerRecord];
-            int recordSize = sizeof(recordHeader) + sizeof(buffer);
-
-            // Determine offset in ncs file
-            int64_t firstRecord = startInRecordingUnits / nSamplesPerRecord;
-            int offsetInFirstRecord = startInRecordingUnits - firstRecord * nSamplesPerRecord;
-            qint64 position = (qint64)(sizeof(fileHeader) + firstRecord * recordSize + sizeof(recordHeader) + offsetInFirstRecord * sizeof(int16_t));
-
-            // Data will be read starting somewhere in the first record (not necessarily at the beginning), proceeding with
-            // a number of complete records, and ending somwhere in the last record (not necessarily at the end)
-            int inFirstRecord = nSamplesPerRecord - offsetInFirstRecord;
-            int64_t nRecords = (nbSamples - inFirstRecord) / nSamplesPerRecord;
-            int inLastRecord = nbSamples - nRecords * nSamplesPerRecord - inFirstRecord - 1;
-            qint64 nRead;
+            const qint64 recordSize = NCS_RECORD_HEADER_SIZE + NCS_SAMPLES_PER_RECORD * sizeof(int16_t);
+            int16_t buffer[NCS_SAMPLES_PER_RECORD];
 
             int p = fileName.lastIndexOf(".");
             QString baseName = fileName;
@@ -173,63 +168,20 @@ void TracesProvider::retrieveData(long startTime, long endTime, QObject* initiat
                     return;
                 }
 
-                // Start at appropriate offset
-                fseeko64(dataFile, position, SEEK_SET);
-
-                // 1) Read the rest of the first record
-                nRead = fread((char*)buffer, sizeof(int16_t), inFirstRecord, dataFile);
-                if (nRead != inFirstRecord)
+                // Read the window record by record, skipping the record headers. Samples past the end of the
+                // file are 0, because the channel files do not necessarily have the same number of records.
+                for (dataType i = 0; i < nbSamples;)
                 {
-                    // Do not report an error, because Neuralynx files do not necessarily all have the same number of
-                    // records (sometimes the last record is missing...)
+                    const dataType sample = startInRecordingUnits + i;
+                    const dataType record = sample / NCS_SAMPLES_PER_RECORD;
+                    const int offsetInRecord = static_cast<int>(sample - record * NCS_SAMPLES_PER_RECORD);
+                    const int nbToRead = static_cast<int>(qMin<dataType>(NCS_SAMPLES_PER_RECORD - offsetInRecord, nbSamples - i));
 
-                    // Emit the signal with an empty array, let the receiver handle the error (user message).
-                    //data.setSize(0,0);
-                    //fclose(dataFile);
-                    //emit dataReady(data,initiator);
-                    //return;
-                }
-                for (int i = 0; i < inFirstRecord; ++i)
-                    retrieveData[i * nbChannels + channel - 1] = buffer[i];
-
-                // 2) Read N full records
-                for (int r = 0; r < nRecords; ++r)
-                {
-                    fread(recordHeader, sizeof(recordHeader), 1, dataFile); // skip header
-                    nRead = fread((char*)buffer, sizeof(int16_t), nSamplesPerRecord, dataFile);
-                    if (nRead != nSamplesPerRecord)
-                    {
-                        // Do not report an error, because Neuralynx files do not necessarily all have the same number of
-                        // records (sometimes the last record is missing...)
-
-                        // Emit the signal with an empty array, let the receiver handle the error (user message).
-                        //data.setSize(0,0);
-                        //fclose(dataFile);
-                        //emit dataReady(data,initiator);
-                        //return;
-                    }
-                    for (int i = 0; i < nSamplesPerRecord; ++i)
-                        retrieveData[(i + inFirstRecord + r * nSamplesPerRecord) * nbChannels + channel - 1] = buffer[i];
-                }
-
-                // 3) Read the beginning of the last record
-                if (inLastRecord > 0)
-                {
-                    fread(recordHeader, sizeof(recordHeader), 1, dataFile); // skip header
-                    nRead = fread((char*)buffer, sizeof(int16_t), inLastRecord, dataFile);
-                    if (nRead != inLastRecord)
-                    {
-                        // Do not report an error, because Neuralynx files do not necessarily all have the same number of
-                        // records (sometimes the last record is missing...)
-
-                        // Emit the signal with an empty array, let the receiver handle the error (user message).
-                        //data.setSize(0,0);
-                        //fclose(dataFile);
-                        //emit dataReady(data,initiator);
-                        //return;
-                    }
-                    for (int i = 0; i < inLastRecord; ++i)
-                        retrieveData[(i + inFirstRecord + nRecords * nSamplesPerRecord) * nbChannels + channel - 1] = buffer[i];
+                    fseeko64(dataFile, NCS_HEADER_SIZE + record * recordSize + NCS_RECORD_HEADER_SIZE + offsetInRecord * sizeof(int16_t), SEEK_SET);
+                    const size_t nbRead = fread(buffer, sizeof(int16_t), nbToRead, dataFile);
+                    std::fill(buffer + nbRead, buffer + nbToRead, 0);
+                    for (int j = 0; j < nbToRead; ++j, ++i)
+                        retrieveData[i * nbChannels + channel - 1] = buffer[j];
                 }
                 fclose(dataFile);
             }
@@ -372,19 +324,15 @@ void TracesProvider::computeRecordingLength()
     {
         /// Modified by M.Zugaro to read Neuralynx ncs format
 
-        // Neuralynx headers
-        char fileHeader[16 * 1024];
-        char recordHeader[20];
-        const int nSamplesPerRecord = 512;
-        int recordSize = sizeof(recordHeader) + nSamplesPerRecord * dataSize;
+        int recordSize = NCS_RECORD_HEADER_SIZE + NCS_SAMPLES_PER_RECORD * dataSize;
 
         // Determine number of complete records in file, + amount of extra data (last record may be incomplete)
-        int64_t nRecords = (fileLength - sizeof(fileHeader)) / recordSize;
-        int extraData = (fileLength - sizeof(fileHeader)) - nRecords * recordSize - sizeof(recordHeader);
+        int64_t nRecords = (fileLength - NCS_HEADER_SIZE) / recordSize;
+        int extraData = (fileLength - NCS_HEADER_SIZE) - nRecords * recordSize - NCS_RECORD_HEADER_SIZE;
         if (extraData < 0)
             extraData = 0;
         // Only one channel per file!
-        nbSamples = nRecords * nSamplesPerRecord + extraData / dataSize;
+        nbSamples = nRecords * NCS_SAMPLES_PER_RECORD + extraData / dataSize;
         /// (end of code modified by M.Zugaro)
     }
     else

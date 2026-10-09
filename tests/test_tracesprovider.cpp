@@ -95,6 +95,8 @@ class TestTracesProvider : public QObject
         // Zero-padded channel numbers.
         writeFile(path("TT01.ncs"), ncsFile(1500, [](std::int64_t s) { return rawNcs(s, 0); }));
         writeFile(path("TT02.ncs"), ncsFile(1500, [](std::int64_t s) { return rawNcs(s, 1); }));
+        writeFile(path("SHORT1.ncs"), ncsFile(1500, [](std::int64_t s) { return rawNcs(s, 0); }));
+        writeFile(path("SHORT2.ncs"), ncsFile(1024, [](std::int64_t s) { return rawNcs(s, 1); }));
     }
 
     void recordingLength_data()
@@ -261,6 +263,8 @@ class TestTracesProvider : public QObject
         QTest::newRow("first record to second") << "CSC1.ncs" << 100_i64 << 700_i64;
         QTest::newRow("spanning three records") << "CSC1.ncs" << 500_i64 << 1100_i64;
         QTest::newRow("record boundary") << "CSC1.ncs" << 512_i64 << 1100_i64;
+        QTest::newRow("within one record") << "CSC1.ncs" << 100_i64 << 200_i64;
+        QTest::newRow("one sample") << "CSC1.ncs" << 300_i64 << 300_i64;
         QTest::newRow("zero-padded file names") << "TT01.ncs" << 100_i64 << 700_i64;
     }
 
@@ -276,15 +280,22 @@ class TestTracesProvider : public QObject
         const std::int64_t nbSamples = endTime - startTime + 1;
         QCOMPARE(data.rows, nbSamples);
         QCOMPARE(data.cols, 2_i64);
-        for (std::int64_t s = 0; s < nbSamples - 1; ++s)
+        for (std::int64_t s = 0; s < nbSamples; ++s)
             for (int c = 0; c < 2; ++c)
                 QCOMPARE(data(s + 1, c + 1), roundHalfAway(rawNcs(startTime + s, c) * gain(16)));
+    }
 
-        const QVector<std::int64_t> lastSample = {data(nbSamples, 1), data(nbSamples, 2)};
-        const QVector<std::int64_t> expectedLastSample = {roundHalfAway(rawNcs(endTime, 0) * gain(16)),
-                                                          roundHalfAway(rawNcs(endTime, 1) * gain(16))};
-        QEXPECT_FAIL("", "The last sample of the window is not read from .ncs files (off by one in inLastRecord, #14)", Abort);
-        QCOMPARE(lastSample, expectedLastSample);
+    void ncsShortChannelFileIsZeroPadded()
+    {
+        // The second channel's file ends after its second record, before the window.
+        TracesProvider provider(path("SHORT1.ncs"), 2, 16, VOLTAGE_RANGE, AMPLIFICATION, 1000.0, 0);
+        const Matrix data = request(provider, 1100, 1200);
+        QCOMPARE(data.rows, 101_i64);
+        for (std::int64_t s = 0; s < 101; ++s)
+        {
+            QCOMPARE(data(s + 1, 1), roundHalfAway(rawNcs(1100 + s, 0) * gain(16)));
+            QCOMPARE(data(s + 1, 2), 0_i64);
+        }
     }
 
     void ncsMissingChannelFileIsEmpty()
