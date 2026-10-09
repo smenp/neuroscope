@@ -312,6 +312,7 @@ class TestTracesProvider : public QObject
         QTest::newRow("first record to second") << "CSC1.ncs" << 100_i64 << 700_i64;
         QTest::newRow("spanning three records") << "CSC1.ncs" << 500_i64 << 1100_i64;
         QTest::newRow("record boundary") << "CSC1.ncs" << 512_i64 << 1100_i64;
+        QTest::newRow("within one record") << "CSC1.ncs" << 100_i64 << 200_i64;
         QTest::newRow("zero-padded file names") << "TT01.ncs" << 100_i64 << 700_i64;
     }
 
@@ -327,15 +328,9 @@ class TestTracesProvider : public QObject
         const std::int64_t nbSamples = endTime - startTime + 1;
         QCOMPARE(data.rows, nbSamples);
         QCOMPARE(data.cols, 2_i64);
-        for (std::int64_t s = 0; s < nbSamples - 1; ++s)
+        for (std::int64_t s = 0; s < nbSamples; ++s)
             for (int c = 0; c < 2; ++c)
                 QCOMPARE(data(s + 1, c + 1), roundHalfAway(rawNcs(startTime + s, c) * gain(16)));
-
-        const QVector<std::int64_t> lastSample = {data(nbSamples, 1), data(nbSamples, 2)};
-        const QVector<std::int64_t> expectedLastSample = {roundHalfAway(rawNcs(endTime, 0) * gain(16)),
-                                                          roundHalfAway(rawNcs(endTime, 1) * gain(16))};
-        QEXPECT_FAIL("", "The last sample of the window is not read from .ncs files (off by one in inLastRecord, #14)", Abort);
-        QCOMPARE(lastSample, expectedLastSample);
     }
 
     void ncsMissingChannelFileIsEmpty()
