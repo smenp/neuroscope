@@ -191,8 +191,28 @@ class ChannelPalette : public QScrollArea
     /**Background color.*/
     QColor backgroundColor;
 
-    /**Prevent from emitting signal while globaly selecting items*/
-    bool isInSelectItems;
+    /**Keeps the palette from signalling the selection changes made while it exists. Blockers nest.
+    * A blocker created with @p signalChange signals the selection once, when it is the outermost blocker and ends,
+    * if the selection has changed in the meantime.
+    */
+    class SelectionBlocker
+    {
+      public:
+        explicit SelectionBlocker(ChannelPalette* palette, bool signalChange = false);
+        ~SelectionBlocker();
+        SelectionBlocker(const SelectionBlocker&) = delete;
+        SelectionBlocker& operator=(const SelectionBlocker&) = delete;
+
+      private:
+        ChannelPalette* palette;
+        bool signalChange;
+    };
+
+    /**Number of living SelectionBlocker.*/
+    int selectionBlockers;
+
+    /**True if the selection has changed since the outermost living SelectionBlocker was created.*/
+    bool selectionChanged;
 
     QVBoxLayout* verticalContainer;
 

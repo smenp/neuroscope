@@ -40,7 +40,7 @@
 #include <qnamespace.h>
 
 ChannelPalette::ChannelPalette(PaletteType type, const QColor& backgroundColor, bool edition, QWidget* parent, const char* name)
-    : QScrollArea(parent), channelColors(0L), backgroundColor(backgroundColor), isInSelectItems(false),
+    : QScrollArea(parent), channelColors(0L), backgroundColor(backgroundColor), selectionBlockers(0), selectionChanged(false),
       spaceWidget(0L), channelsGroups(0L), groupsChannels(0L), channelLabels(0L), greyScale(false), isGroupToRemove(false), type(type), edit(edition)
 {
     setObjectName(name);
@@ -227,8 +227,7 @@ void ChannelPalette::slotMousePressed(const QString& sourceGroupName)
         ChannelIconView* iconView = iconviewDict[sourceGroupName];
         bool unselect = selectionStatus[sourceGroupName];
 
-        //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-        isInSelectItems = true;
+        const SelectionBlocker blocker(this);
 
         if (unselect)
         {
@@ -249,8 +248,6 @@ void ChannelPalette::slotMousePressed(const QString& sourceGroupName)
                 emit updateShownChannels(selected);
             emit channelsSelected(selected);
         }
-        //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-        isInSelectItems = false;
     }
 }
 
@@ -287,16 +284,28 @@ const QList<int> ChannelPalette::selectedChannels()
 
 void ChannelPalette::slotClickRedraw()
 {
-    if (!isInSelectItems && !edit)
+    if (selectionBlockers > 0)
     {
-        QList<int> selected = selectedChannels();
+        selectionChanged = true;
+        return;
+    }
+    QList<int> selected = selectedChannels();
+    if (!edit)
         emit updateShownChannels(selected);
-    }
-    if (!isInSelectItems)
-    {
-        QList<int> selected = selectedChannels();
-        emit channelsSelected(selected);
-    }
+    emit channelsSelected(selected);
+}
+
+ChannelPalette::SelectionBlocker::SelectionBlocker(ChannelPalette* palette, bool signalChange)
+    : palette(palette), signalChange(signalChange)
+{
+    if (palette->selectionBlockers++ == 0)
+        palette->selectionChanged = false;
+}
+
+ChannelPalette::SelectionBlocker::~SelectionBlocker()
+{
+    if (--palette->selectionBlockers == 0 && signalChange && palette->selectionChanged)
+        palette->slotClickRedraw();
 }
 
 
@@ -319,8 +328,7 @@ void ChannelPalette::hideChannels()
 
 void ChannelPalette::hideUnselectAllChannels()
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     ChannelIconView* iconView = 0L;
     QPainter painter;
@@ -346,9 +354,6 @@ void ChannelPalette::hideUnselectAllChannels()
             lstItem.first()->setIcon(QIcon(pixmap));
         }
     }
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::updateShowHideStatus(bool showStatus)
@@ -362,8 +367,7 @@ void ChannelPalette::updateShowHideStatus(bool showStatus)
 
 void ChannelPalette::updateShowHideStatus(const QList<int>& channelIds, bool showStatus)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     if (!edit)
     {
@@ -412,9 +416,6 @@ void ChannelPalette::updateShowHideStatus(const QList<int>& channelIds, bool sho
 
 
     selectChannels(selectedIds);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 const QList<int> ChannelPalette::getShowHideChannels(bool showStatus)
@@ -436,8 +437,7 @@ const QList<int> ChannelPalette::getShowHideChannels(bool showStatus)
 
 void ChannelPalette::updateSkipStatus(const QMap<int, bool>& skipStatus)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     if (!edit)
     {
@@ -503,16 +503,12 @@ void ChannelPalette::updateSkipStatus(const QMap<int, bool>& skipStatus)
     }
 
     selectChannels(selectedIds);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 
 void ChannelPalette::updateSkipStatus(const QList<int>& channelIds, bool skipStatus)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     if (!edit)
     {
@@ -577,9 +573,6 @@ void ChannelPalette::updateSkipStatus(const QList<int>& channelIds, bool skipSta
     }
 
     selectChannels(selectedIds);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 
@@ -841,8 +834,7 @@ void ChannelPalette::languageChange()
 
 void ChannelPalette::selectChannels(const QList<int>& selectedChannels)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
     //unselect all the items first
     QHashIterator<QString, ChannelIconView*> iteratordict(iconviewDict);
     while (iteratordict.hasNext())
@@ -870,9 +862,6 @@ void ChannelPalette::selectChannels(const QList<int>& selectedChannels)
     //Last item in selection gets focus if it exists
     if (!selectedChannels.isEmpty())
         iconView->setCurrentItem(currentIcon);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::reset()
@@ -885,8 +874,6 @@ void ChannelPalette::reset()
     edit = true;
     selected.clear();
     selectionStatus.clear();
-
-    isInSelectItems = false;
 }
 
 void ChannelPalette::createGroup(int id)
@@ -1216,6 +1203,8 @@ int ChannelPalette::createEmptyGroup()
 
 void ChannelPalette::moveChannels(int targetGroup)
 {
+    const SelectionBlocker batch(this, true);
+
     ChannelIconView* iconView = iconviewDict[QString::number(targetGroup)];
 
     //Get the destination group color to later update the group color of the moved channels, for a new group blue is the default
@@ -1270,6 +1259,8 @@ void ChannelPalette::moveChannels(int targetGroup)
             else
                 channelIds.append(channelId);
         }
+        //Only the selected items are moved: deselect them at once rather than one by one as they are deleted
+        it.value()->clearSelection();
         //Delete the entries in the source group
         QList<int>::iterator it2;
         for (it2 = currentMovedChannels.begin(); it2 != currentMovedChannels.end(); ++it2)
@@ -1428,8 +1419,7 @@ void ChannelPalette::deleteEmptyGroups()
 
 void ChannelPalette::selectAllChannels()
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     //unselect all the items first
     QHashIterator<QString, ChannelIconView*> iteratordict(iconviewDict);
@@ -1442,15 +1432,11 @@ void ChannelPalette::selectAllChannels()
 
     QList<int> selected = selectedChannels();
     emit channelsSelected(selected);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::deselectAllChannels()
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     //unselect all the items first
     QHashIterator<QString, ChannelIconView*> iteratordict(iconviewDict);
@@ -1461,9 +1447,6 @@ void ChannelPalette::deselectAllChannels()
     }
     QList<int> selected;
     emit channelsSelected(selected);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::removeChannelsFromTrash(const QList<int>& channelIds)
@@ -1490,6 +1473,8 @@ void ChannelPalette::removeChannelsFromTrash(const QList<int>& channelIds)
 
 void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& sourceGroup, const QString& targetGroup, int index, bool moveAll)
 {
+    const SelectionBlocker batch(this, true);
+
     QList<int> targetChannels = (*groupsChannels)[targetGroup.toInt()];
     QList<int> sourceChannels = (*groupsChannels)[sourceGroup.toInt()];
 
@@ -1583,6 +1568,8 @@ void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& s
 
 void ChannelPalette::slotChannelsMoved(const QString& targetGroup, QListWidgetItem* after)
 {
+    const SelectionBlocker batch(this, true);
+
     //If the channels have been moved to the trash inform the other palette.
     int afterId = -1;
     bool beforeFirst = false;
@@ -1779,6 +1766,8 @@ void ChannelPalette::trashChannelsMovedAround(const QList<int>& channelIds, cons
 
 void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after)
 {
+    const SelectionBlocker batch(this, true);
+
     QList<int>::const_iterator iterator;
     QPainter painter;
 
@@ -1876,8 +1865,7 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard)
 
     emit paletteResized(viewport()->width(), labelSize);
 
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     QPainter painter;
 
@@ -1968,13 +1956,13 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard)
     //Do not leave empty groups.
     deleteEmptyGroups();
 
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
     update();
 }
 
 void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const int afterId, bool beforeFirst)
 {
+    const SelectionBlocker batch(this, true);
+
     ChannelIconView* trash = iconviewDict["0"];
     //The channels are inserted in order, at the front, after the item afterId, or else at the end.
     QListWidgetItem* after = 0;
@@ -2065,8 +2053,7 @@ void ChannelPalette::discardChannels(const QList<int>& channelsToDiscard, const 
 
 void ChannelPalette::setEditMode(bool edition)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     edit = edition;
     emit setDragAndDrop(edition);
@@ -2108,9 +2095,6 @@ void ChannelPalette::setEditMode(bool edition)
     }
 
     selectChannels(selectedIds);
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::drawItem(QPainter& painter, QPixmap* pixmap, QColor color, bool show, bool skip)
@@ -2193,8 +2177,7 @@ void ChannelPalette::discardSpikeChannels()
 
 void ChannelPalette::trashChannels(int destinationGroup)
 {
-    //Set isInSelectItems to true to prevent the emission of signals due to selectionChange
-    isInSelectItems = true;
+    const SelectionBlocker blocker(this);
 
     //Check if there is anything to do
     const QList<int> selectedIds = selectedChannels();
@@ -2354,9 +2337,6 @@ void ChannelPalette::trashChannels(int destinationGroup)
         QList<int> selected;
         emit channelsSelected(selected);
     }
-
-    //reset isInSelectItems to false to enable again the the emission of signals due to selectionChange
-    isInSelectItems = false;
 }
 
 void ChannelPalette::slotMoveListItem(const QList<int>& items, const QString& sourceGroup, const QString& destinationGroup, int index, bool moveAll)
@@ -2389,6 +2369,8 @@ void ChannelPalette::slotMoveListItem(const QList<int>& items, const QString& so
 
 void ChannelPalette::dragChannels(const QList<int>& channelIds, const QString& sourceGroup, const QString& targetGroup, int index, bool moveAll)
 {
+    const SelectionBlocker batch(this, true);
+
     QList<int> targetChannels = (*groupsChannels)[targetGroup.toInt()];
     QList<int> sourceChannels = (*groupsChannels)[sourceGroup.toInt()];
 
