@@ -42,7 +42,6 @@
 
 // forward declaration
 class ChannelColors;
-class SpaceWidget;
 
 /**
   * This class represents the channel palettes of the application (anatomical and spike).
@@ -146,7 +145,6 @@ class ChannelPalette : public QScrollArea
     void applyGroupColor(PaletteType paletteType);
     void applyCustomColor();
     void setEditMode(bool edition);
-    void groupToMove(int sourceId, int targetId, int start, int destination);
     void removeChannelsFromTrash(const QList<int>& channelIds);
     void selectionTool()
     {
@@ -161,13 +159,14 @@ class ChannelPalette : public QScrollArea
     virtual void languageChange();
     virtual void createGroup(int id);
     virtual void setChannelLists();
-    void slotDragLabeltMoved(const QPoint& position) { ensureVisible(position.x(), position.y()); }
 
     void slotMoveListItem(const QList<int>&, const QString& sourceGroup, const QString& destinationGroup, int index, bool moveAll);
 
   protected:
     void resizeEvent(QResizeEvent* event);
     void paintEvent(QPaintEvent* event);
+    /**Moves the group dropped on the widget holding the groups.*/
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   Q_SIGNALS:
     void singleChangeColor(int selectedChannel);
@@ -223,7 +222,7 @@ class ChannelPalette : public QScrollArea
     QHash<QString, ChannelGroupView*> channelGroupViewDict;
 
     /**Dummy widget used to keep the iconviews nicely display in the pannel.*/
-    SpaceWidget* spaceWidget;
+    QWidget* spaceWidget;
 
     /**Stores to which group each channel belongs. Pointer to the variable belonging to
     NeuroscopeDoc.*/
@@ -310,34 +309,18 @@ class ChannelPalette : public QScrollArea
     * @return the id of the new group.
     */
     int createEmptyGroup();
-};
 
-/**IUtility class used to create the channel palettes of the application (anatomical and spike)..
-*/
-class SpaceWidget : public QWidget
-{
-    Q_OBJECT
-  public:
-    SpaceWidget(QWidget* parent, bool drag)
-        : QWidget(parent),
-          drag(drag)
-    {
-        setAcceptDrops(true);
-    }
+    /**Returns the number of groups, the trash groups excepted. These groups have the ids 1 to groupCount().*/
+    int groupCount() const;
 
-    void dropEvent(QDropEvent* event);
+    /**Returns the id of the group of this palette dragged by @p event, or 0 if it does not drag a group which can be moved.*/
+    int draggedGroup(const QDropEvent* event) const;
 
-    void dragEnterEvent(QDragEnterEvent* event);
-
-  public Q_SLOTS:
-    void setDragAndDrop(bool dragDrop) { drag = dragDrop; }
-
-  Q_SIGNALS:
-    void dropLabel(int sourceId, int targetId, int start, int destination);
-
-  private:
-    /**True the drag and drop is allow, false otherwise.*/
-    bool drag;
+    /**Moves a group between two others and renumbers the groups from the top.
+    * @param sourceId id of the group to move.
+    * @param position number of groups to be above the group moved, the group moved excepted.
+    */
+    void moveGroup(int sourceId, int position);
 };
 
 /**

@@ -92,7 +92,6 @@ class ChannelIconView : public QListWidget
     void mousePressMiddleButton(QListWidgetItem* item);
     void channelsMoved(const QString& targetGroup, QListWidgetItem* after);
     void channelsMoved(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after);
-    void dropLabel(int sourceId, int targetId, int start, int destination);
 
     void removeGroup(const QString& name);
     void moveListItem(const QList<int>& listId, const QString& sourceGroupName, const QString& destGroupName, int index, bool moveAll);

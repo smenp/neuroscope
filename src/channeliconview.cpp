@@ -16,7 +16,6 @@
  ***************************************************************************/
 // application specific includes
 #include "channeliconview.h"
-#include "channelmimedata.h"
 // include files for Qt
 #include <QCursor>
 // #include <QTextCodec>
@@ -155,15 +154,6 @@ void ChannelIconView::wheelEvent(QWheelEvent* event)
 bool ChannelIconView::dropMimeData(int index, const QMimeData* mimeData, Qt::DropAction action)
 {
     Q_UNUSED(action);
-
-    if (ChannelMimeData::hasInformation(mimeData))
-    {
-        int groupSource, start;
-        ChannelMimeData::getInformation(mimeData, &groupSource, &start);
-        QString groupTarget = objectName();
-        emit dropLabel(groupSource, groupTarget.toInt(), start, /*QWidget::mapToGlobal(event->pos()).y()*/ 0);
-        return true;
-    }
 
     const QByteArray data = mimeData->data("application/x-channeliconview");
     if (data.isEmpty())

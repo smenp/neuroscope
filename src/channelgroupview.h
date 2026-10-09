@@ -22,8 +22,6 @@
 #include <QObject>
 #include <QPainter>
 
-#include <QDragEnterEvent>
-#include <QDropEvent>
 #include <QHBoxLayout>
 
 class QLabel;
@@ -37,7 +35,7 @@ class ChannelGroupView : public QWidget
 {
     Q_OBJECT
   public:
-    explicit ChannelGroupView(bool drag, const QColor& backgroundColor, QWidget* parent = 0);
+    explicit ChannelGroupView(const QColor& backgroundColor, QWidget* parent = 0);
 
     ~ChannelGroupView() {}
 
@@ -45,25 +43,13 @@ class ChannelGroupView : public QWidget
     void setIconView(ChannelIconView* view);
 
     QLabel* label();
-  Q_SIGNALS:
-    void dropLabel(int sourceId, int targetId, int start, int destination);
-    void dragObjectMoved(QPoint position);
 
   public Q_SLOTS:
     void reAdjustSize(int parentWidth, int labelSize);
 
-    void setDragAndDrop(bool dragDrop) { drag = dragDrop; }
-
-  protected:
-    virtual void dropEvent(QDropEvent* event);
-
-    virtual void dragEnterEvent(QDragEnterEvent* event);
-
   private:
     ChannelIconView* iconView;
 
-    /**True the drag and drop is allow, false otherwise.*/
-    bool drag;
     QHBoxLayout* mLayout;
     QLabel* mLabel;
     bool init;

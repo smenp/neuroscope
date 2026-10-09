@@ -17,15 +17,12 @@
 
 #include "channelgroupview.h"
 #include "channeliconview.h"
-#include "channelmimedata.h"
 #include <QListWidget>
 #include <QLabel>
-#include <QMimeData>
 
-ChannelGroupView::ChannelGroupView(bool drag, const QColor& backgroundColor, QWidget* parent)
+ChannelGroupView::ChannelGroupView(const QColor& backgroundColor, QWidget* parent)
     : QWidget(parent),
       iconView(0L),
-      drag(drag),
       mLabel(0),
       init(true)
 {
@@ -54,8 +51,6 @@ ChannelGroupView::ChannelGroupView(bool drag, const QColor& backgroundColor, QWi
 
     setPalette(palette);
     adjustSize();
-
-    setAcceptDrops(true);
 }
 
 void ChannelGroupView::reAdjustSize(int parentWidth, int labelSize)
@@ -84,38 +79,6 @@ void ChannelGroupView::reAdjustSize(int parentWidth, int labelSize)
     {
         setFixedHeight(iconHeight);
     }
-}
-
-void ChannelGroupView::dropEvent(QDropEvent* event)
-{
-    if (event->source() == 0 || !drag)
-    {
-        event->ignore();
-        return;
-    }
-    if (ChannelMimeData::hasInformation(event->mimeData()))
-    {
-        int groupSource, start;
-        ChannelMimeData::getInformation(event->mimeData(), &groupSource, &start);
-        const QString groupTarget = this->objectName();
-        emit dropLabel(groupSource, groupTarget.toInt(), start, QWidget::mapToGlobal(event->position().toPoint()).y());
-    }
-}
-
-void ChannelGroupView::dragEnterEvent(QDragEnterEvent* event)
-{
-    if (event->source() == 0 || !drag)
-    {
-        event->ignore();
-        return;
-    }
-
-    if (ChannelMimeData::hasInformation(event->mimeData()))
-    {
-        event->acceptProposedAction();
-    }
-    //Enable the parent (ChannelPalette) to ensure that the current group is visible (will scroll if need it)
-    emit dragObjectMoved(QWidget::mapToParent(event->position().toPoint()));
 }
 
 void ChannelGroupView::setIconView(ChannelIconView* view)

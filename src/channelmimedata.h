@@ -22,10 +22,11 @@
 class ChannelMimeData : public QMimeData
 {
   public:
-    void setInformation(int groupSource, int mouseY);
+    /**Sets the id of the group dragged.*/
+    void setGroup(int groupId);
 
-    static bool hasInformation(const QMimeData* mimeData);
-    static void getInformation(const QMimeData* mimeData, int* groupSource, int* mouseY);
+    static bool hasGroup(const QMimeData* mimeData);
+    static int group(const QMimeData* mimeData);
 };
 
 #endif

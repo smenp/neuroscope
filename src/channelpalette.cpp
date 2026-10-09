@@ -70,6 +70,9 @@ ChannelPalette::ChannelPalette(PaletteType type, const QColor& backgroundColor, 
     QWidget* w = new QWidget;
     verticalContainer = new QVBoxLayout;
     w->setLayout(verticalContainer);
+    //A group is dropped anywhere in the column of groups, the gaps between them included
+    w->setAcceptDrops(true);
+    w->installEventFilter(this);
 
     setWidget(w);
     verticalContainer->setSpacing(5);
@@ -878,7 +881,7 @@ void ChannelPalette::reset()
 
 void ChannelPalette::createGroup(int id)
 {
-    ChannelGroupView* group = new ChannelGroupView(edit, backgroundColor);
+    ChannelGroupView* group = new ChannelGroupView(backgroundColor);
     verticalContainer->addWidget(group);
     group->setObjectName(QString::number(id));
     GroupLabel* label = new GroupLabel(QString::number(id), group);
@@ -946,7 +949,7 @@ void ChannelPalette::createGroup(int id)
     group->show();
 
     delete spaceWidget;
-    spaceWidget = new SpaceWidget(this, edit);
+    spaceWidget = new QWidget;
     verticalContainer->addWidget(spaceWidget);
     spaceWidget->show();
     verticalContainer->setStretchFactor(spaceWidget, 2);
@@ -961,12 +964,6 @@ void ChannelPalette::createGroup(int id)
     connect(label, SIGNAL(leftClickOnLabel(QString)), this, SLOT(slotMousePressed(QString)));
 
     connect(this, SIGNAL(setDragAndDrop(bool)), iconView, SLOT(setDragAndDrop(bool)));
-    connect(this, SIGNAL(setDragAndDrop(bool)), group, SLOT(setDragAndDrop(bool)));
-    connect(this, SIGNAL(setDragAndDrop(bool)), spaceWidget, SLOT(setDragAndDrop(bool)));
-    connect(iconView, SIGNAL(dropLabel(int, int, int, int)), this, SLOT(groupToMove(int, int, int, int)));
-    connect(group, SIGNAL(dropLabel(int, int, int, int)), this, SLOT(groupToMove(int, int, int, int)));
-    connect(spaceWidget, SIGNAL(dropLabel(int, int, int, int)), this, SLOT(groupToMove(int, int, int, int)));
-    connect(group, SIGNAL(dragObjectMoved(QPoint)), this, SLOT(slotDragLabeltMoved(QPoint)));
 
     connect(iconView, SIGNAL(moveListItem(QList<int>, QString, QString, int, bool)),
             SLOT(slotMoveListItem(QList<int>, QString, QString, int, bool)));
@@ -983,178 +980,108 @@ void ChannelPalette::slotRowInsered()
     adjustSizeTimer.start();
 }
 
-void ChannelPalette::groupToMove(int sourceId, int targetId, int start, int destination)
+int ChannelPalette::draggedGroup(const QDropEvent* event) const
 {
-    //The trash group can not be moved
-    if ((sourceId == 0) || (sourceId == targetId))
+    if (!edit || !ChannelMimeData::hasGroup(event->mimeData()))
+        return 0;
+    //Only the groups of this palette can be moved in it
+    const QObject* source = event->source();
+    if (!source || !source->isWidgetType() || !isAncestorOf(static_cast<const QWidget*>(source)))
+        return 0;
+    const int groupId = ChannelMimeData::group(event->mimeData());
+    //The trash groups stay at the bottom
+    return groupId > 0 ? groupId : 0;
+}
+
+bool ChannelPalette::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == widget())
+    {
+        if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove)
+        {
+            QDragMoveEvent* dragEvent = static_cast<QDragMoveEvent*>(event);
+            if (draggedGroup(dragEvent))
+            {
+                dragEvent->acceptProposedAction();
+                const QPoint position = dragEvent->position().toPoint();
+                ensureVisible(position.x(), position.y());
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::Drop)
+        {
+            QDropEvent* dropEvent = static_cast<QDropEvent*>(event);
+            if (const int sourceId = draggedGroup(dropEvent))
+            {
+                //The group goes after the last group whose middle is above the drop
+                const int y = dropEvent->position().y();
+                int position = 0;
+                while (position < groupCount() && channelGroupViewDict[QString::number(position + 1)]->geometry().center().y() < y)
+                    ++position;
+                dropEvent->acceptProposedAction();
+                moveGroup(sourceId, position);
+                return true;
+            }
+        }
+    }
+    return QScrollArea::eventFilter(watched, event);
+}
+
+int ChannelPalette::groupCount() const
+{
+    int count = channelGroupViewDict.count();
+    if (channelGroupViewDict.contains("0"))
+        count--;
+    if (channelGroupViewDict.contains("-1"))
+        count--;
+    return count;
+}
+
+void ChannelPalette::moveGroup(int sourceId, int position)
+{
+    const int targetId = position < sourceId ? position + 1 : position;
+    if (targetId == sourceId)
         return;
 
-    ChannelIconView* sourceIconView;
-    ChannelGroupView* sourceGroup;
-    QList<int> sourceChannelsIds;
-
-    //Moving downwards
-    if (destination > start)
+    //The ids of the groups in their new order
+    QList<int> order;
+    for (int id = 1; id <= groupCount(); ++id)
     {
-        //Compute the targetId if it is -2 (<=> spaceWidget)
-        if (targetId == -2)
-        {
-            targetId = channelGroupViewDict.count();
-            //Insert after the biggest group id (before the trash groups)
-            if (iconviewDict.contains("0"))
-                targetId--;
-            if (iconviewDict.contains("-1"))
-                targetId--;
-        }
-        else
-        {
-            ChannelGroupView* group = channelGroupViewDict[QString::number(targetId)];
-            int gpPosition = QWidget::mapToGlobal(group->pos()).y();
-            if (gpPosition + (group->height() / 2) > destination)
-                targetId--;
-
-            //Insert after the biggest group id (before the trash group)
-            if (targetId == 0 || targetId == -1 || targetId == -2)
-            {
-                targetId = channelGroupViewDict.count();
-                if (iconviewDict.contains("0"))
-                    targetId--;
-                if (iconviewDict.contains("-1"))
-                    targetId--;
-            }
-        }
-
-        if (targetId == sourceId)
-            return;
-
-        //insert after targetId
-        //Rename the groups
-        sourceIconView = iconviewDict.take(QString::number(sourceId));
-        sourceGroup = channelGroupViewDict.take(QString::number(sourceId));
-        sourceChannelsIds = (*groupsChannels)[sourceId];
-        groupsChannels->remove(sourceId);
-
-        for (int i = sourceId + 1; i <= targetId; ++i)
-        {
-            //Rename the iconView
-            ChannelIconView* iconView = iconviewDict.take(QString::number(i));
-            iconView->setObjectName(QString::number(i - 1));
-            iconviewDict.insert(QString::number(i - 1), iconView);
-            //Rename the ChannelGroupView and the label
-            ChannelGroupView* group = channelGroupViewDict.take(QString::number(i));
-            group->setObjectName(QString::number(i - 1));
-            QLabel* label = group->label();
-            label->setText(QString::number(i - 1));
-            channelGroupViewDict.insert(QString::number(i - 1), group);
-
-            //Update the groups-channels variables
-            QList<int> channelIds = (*groupsChannels)[i];
-            groupsChannels->remove(i);
-            groupsChannels->insert(i - 1, channelIds);
-
-            QList<int>::iterator iterator;
-            for (iterator = channelIds.begin(); iterator != channelIds.end(); ++iterator)
-            {
-                channelsGroups->remove(*iterator);
-                channelsGroups->insert(*iterator, i - 1);
-            }
-        }
+        if (id != sourceId)
+            order.append(id);
     }
-    else
+    order.insert(targetId - 1, sourceId);
+
+    //Take all the groups out before giving them their new ids, which are taken by other groups until then
+    QList<ChannelIconView*> iconViews;
+    QList<ChannelGroupView*> groups;
+    QList<QList<int>> channels;
+    QList<bool> selections;
+    for (int id: std::as_const(order))
     {
-        //Moving upwards
-        ChannelGroupView* group = channelGroupViewDict[QString::number(targetId)];
-        int gpPosition = QWidget::mapToGlobal(group->pos()).y();
-        if ((gpPosition + (group->height() / 2)) < destination)
-            targetId++;
-
-        if (targetId == sourceId)
-            return;
-
-        //insert before targetId
-        //Rename the groups
-        sourceIconView = iconviewDict.take(QString::number(sourceId));
-        sourceGroup = channelGroupViewDict.take(QString::number(sourceId));
-        sourceChannelsIds = (*groupsChannels)[sourceId];
-        groupsChannels->remove(sourceId);
-
-        for (int i = sourceId - 1; i >= targetId; i--)
-        {
-            //Rename the iconView
-            ChannelIconView* iconView = iconviewDict.take(QString::number(i));
-            iconView->setObjectName(QString::number(i + 1));
-            iconviewDict.insert(QString::number(i + 1), iconView);
-            //Rename the ChannelGroupView and the label
-            ChannelGroupView* group = channelGroupViewDict.take(QString::number(i));
-            group->setObjectName(QString::number(i + 1));
-            QLabel* label = group->label();
-            label->setText(QString::number(i + 1));
-            channelGroupViewDict.insert(QString::number(i + 1), group);
-
-            //Update the groups-channels variables
-            QList<int> channelIds = (*groupsChannels)[i];
-            groupsChannels->remove(i);
-            groupsChannels->insert(i + 1, channelIds);
-
-            QList<int>::iterator iterator;
-            for (iterator = channelIds.begin(); iterator != channelIds.end(); ++iterator)
-            {
-                channelsGroups->remove(*iterator);
-                channelsGroups->insert(*iterator, i + 1);
-            }
-        }
+        const QString name = QString::number(id);
+        iconViews.append(iconviewDict.take(name));
+        groups.append(channelGroupViewDict.take(name));
+        channels.append(groupsChannels->take(id));
+        selections.append(selectionStatus.take(name));
+    }
+    for (int i = 0; i < order.size(); ++i)
+    {
+        const int id = i + 1;
+        const QString name = QString::number(id);
+        iconViews[i]->setObjectName(name);
+        iconviewDict.insert(name, iconViews[i]);
+        groups[i]->setObjectName(name);
+        groups[i]->label()->setText(name);
+        channelGroupViewDict.insert(name, groups[i]);
+        groupsChannels->insert(id, channels[i]);
+        for (int channelId: std::as_const(channels[i]))
+            channelsGroups->insert(channelId, id);
+        selectionStatus.insert(name, selections[i]);
     }
 
-    //Rename the moved group.
-    sourceIconView->setObjectName(QString::number(targetId));
-    iconviewDict.insert(QString::number(targetId), sourceIconView);
-    //Rename the ChannelGroupView and the label
-    sourceGroup->setObjectName(QString::number(targetId));
-    QLabel* label = sourceGroup->label();
-    label->setText(QString::number(targetId));
-    channelGroupViewDict.insert(QString::number(targetId), sourceGroup);
-
-    //Update the groups-channels variables
-    groupsChannels->insert(targetId, sourceChannelsIds);
-
-    QList<int>::iterator iterator;
-    for (iterator = sourceChannelsIds.begin(); iterator != sourceChannelsIds.end(); ++iterator)
-    {
-
-        channelsGroups->remove(*iterator);
-        channelsGroups->insert(*iterator, targetId);
-    }
-
-    //Move the groups
-    verticalContainer->removeWidget(spaceWidget);
-
-    QHashIterator<QString, ChannelGroupView*> it(channelGroupViewDict);
-    while (it.hasNext())
-    {
-        it.next();
-        verticalContainer->removeWidget(it.value());
-    }
-
-    int nbGroups = channelGroupViewDict.count();
-    if (iconviewDict.contains("0"))
-        nbGroups--;
-    if (iconviewDict.contains("-1"))
-        nbGroups--;
-    for (int i = 1; i <= nbGroups; ++i)
-        verticalContainer->addWidget(channelGroupViewDict[QString::number(i)]);
-
-    if (iconviewDict.contains("-1"))
-        verticalContainer->addWidget(channelGroupViewDict["-1"]);
-    if (iconviewDict.contains("0"))
-        verticalContainer->addWidget(channelGroupViewDict["0"]);
-
-    delete spaceWidget;
-    spaceWidget = new SpaceWidget(this, edit);
-    verticalContainer->addWidget(spaceWidget);
-    connect(this, SIGNAL(setDragAndDrop(bool)), spaceWidget, SLOT(setDragAndDrop(bool)));
-    connect(spaceWidget, SIGNAL(dropLabel(int, int, int, int)), this, SLOT(groupToMove(int, int, int, int)));
-    spaceWidget->show();
-    verticalContainer->setStretchFactor(spaceWidget, 2);
+    //Lay the groups out in their new order
+    moveTrashesToBottom();
 
     update();
     emit groupModified();
@@ -1168,11 +1095,7 @@ void ChannelPalette::createGroup()
     if (selectedIds.isEmpty())
         return;
 
-    int groupNb = iconviewDict.count() + 1;
-    if (iconviewDict.contains("0"))
-        groupNb--;
-    if (iconviewDict.contains("-1"))
-        groupNb--;
+    const int groupNb = groupCount() + 1;
 
     createGroup(groupNb);
 
@@ -1184,11 +1107,7 @@ void ChannelPalette::createGroup()
 
 int ChannelPalette::createEmptyGroup()
 {
-    int groupNb = iconviewDict.count() + 1;
-    if (iconviewDict.contains("0"))
-        groupNb--;
-    if (iconviewDict.contains("-1"))
-        groupNb--;
+    const int groupNb = groupCount() + 1;
 
     createGroup(groupNb);
 
@@ -2142,13 +2061,7 @@ void ChannelPalette::moveTrashesToBottom()
     }
 
     //Insert all the groups except the trashes which go at the bottom
-    int nbGroup = channelGroupViewDict.count();
-    if (iconviewDict.contains("0"))
-        nbGroup--;
-    if (iconviewDict.contains("-1"))
-        nbGroup--;
-
-    for (int i = 1; i <= nbGroup; ++i)
+    for (int i = 1; i <= groupCount(); ++i)
     {
         verticalContainer->addWidget(channelGroupViewDict[QString::number(i)]);
     }
@@ -2160,10 +2073,8 @@ void ChannelPalette::moveTrashesToBottom()
         verticalContainer->addWidget(channelGroupViewDict["0"]);
 
     delete spaceWidget;
-    spaceWidget = new SpaceWidget(this, edit);
+    spaceWidget = new QWidget;
     verticalContainer->addWidget(spaceWidget);
-    connect(this, SIGNAL(setDragAndDrop(bool)), spaceWidget, SLOT(setDragAndDrop(bool)));
-    connect(spaceWidget, SIGNAL(dropLabel(int, int, int, int)), this, SLOT(groupToMove(int, int, int, int)));
     spaceWidget->show();
     verticalContainer->setStretchFactor(spaceWidget, 2);
 }
@@ -2475,11 +2386,9 @@ void GroupLabel::mousePressEvent(QMouseEvent* e)
 {
     if (e->button() == Qt::LeftButton)
     {
-        QPoint firstClick = QWidget::mapToGlobal(e->position().toPoint());
-
         QDrag* drag = new QDrag(this);
         ChannelMimeData* mimeData = new ChannelMimeData;
-        mimeData->setInformation(parent()->objectName().toInt(), firstClick.y());
+        mimeData->setGroup(parent()->objectName().toInt());
         drag->setMimeData(mimeData);
         //The label follows the mouse, held where it was pressed
         drag->setPixmap(grab());
@@ -2492,34 +2401,5 @@ void GroupLabel::mousePressEvent(QMouseEvent* e)
     else if (e->button() == Qt::MiddleButton)
     {
         emit middleClickOnLabel(parent()->objectName());
-    }
-}
-
-void SpaceWidget::dropEvent(QDropEvent* event)
-{
-    if (event->source() == 0 || !drag)
-    {
-        event->ignore();
-        return;
-    }
-    if (ChannelMimeData::hasInformation(event->mimeData()))
-    {
-        int groupSource, start;
-        ChannelMimeData::getInformation(event->mimeData(), &groupSource, &start);
-        //to inform that the target is the SpaceWidget, put -2 as the target group.
-        emit dropLabel(groupSource, -2, start, QWidget::mapToGlobal(event->position().toPoint()).y());
-    }
-}
-
-void SpaceWidget::dragEnterEvent(QDragEnterEvent* event)
-{
-    if (event->source() == 0 || !drag)
-    {
-        event->ignore();
-        return;
-    }
-    if (ChannelMimeData::hasInformation(event->mimeData()))
-    {
-        event->acceptProposedAction();
     }
 }
