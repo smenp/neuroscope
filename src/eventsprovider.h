@@ -331,6 +331,13 @@ class EventsProvider : public DataProvider
   */
     long findIndex(double eventTime, int eventId = -1);
 
+    /**Finds the index of the event with id @p eventId whose time is closest to @p eventTime.
+  * @param eventTime time to look up.
+  * @param eventId id of the event to look up.
+  * @param startIndex index to start the search from, and the result if no event has the id.
+  */
+    long closestEventIndex(double eventTime, int eventId, long startIndex);
+
     /** Creates a new description event.
   *  @param eventDescriptionToAdd event description to add.
   */

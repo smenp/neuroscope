@@ -907,7 +907,7 @@ void EventsProvider::modifiedEvent(int selectedEventId, double time, double newT
     modified = true;
 
     long timeIndex = findIndex(time, selectedEventId);
-    long newTimeIndex = findIndex(newTime, selectedEventId);
+    long newTimeIndex = findIndex(newTime);
     EventDescription selectedEvent = idsDescriptions[selectedEventId];
 
     //Clear the redo variables
@@ -985,10 +985,29 @@ void EventsProvider::modifiedEvent(int selectedEventId, double time, double newT
     previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
 }
 
+long EventsProvider::closestEventIndex(double eventTime, int eventId, long startIndex)
+{
+    //below and above enclose eventTime; the times are sorted, so they move away from it.
+    long below = startIndex;
+    while (below >= 1 && timeStamps(1, below) > eventTime)
+        --below;
+    while (below < nbEvents && timeStamps(1, below + 1) <= eventTime)
+        ++below;
+    long above = below + 1;
+    while (below >= 1 || above <= nbEvents)
+    {
+        const bool takeBelow = above > nbEvents || (below >= 1 && eventTime - timeStamps(1, below) <= timeStamps(1, above) - eventTime);
+        const long index = takeBelow ? below-- : above++;
+        if (eventIds[events(1, index)] == eventId)
+            return index;
+    }
+    return startIndex;
+}
+
 long EventsProvider::findIndex(double eventTime, int eventId)
 {
     if (eventTime > fileMaxTime)
-        return nbEvents;
+        return eventId == -1 ? nbEvents : closestEventIndex(eventTime, eventId, nbEvents);
 
     long startTime = static_cast<long>(floor(0.5 + eventTime));
 
@@ -1112,21 +1131,9 @@ long EventsProvider::findIndex(double eventTime, int eventId)
         }
     }
 
+    //The search above matches rounded milliseconds, which events less than a millisecond apart share.
     if (eventId != -1)
-    {
-        int id = eventIds[events(1, startIndex)];
-        if (id != eventId)
-        {
-            double diff1 = fabs(timeStamps(1, startIndex) - timeStamps(1, startIndex - 1));
-            double diff2 = fabs(timeStamps(1, startIndex + 1) - timeStamps(1, startIndex));
-            if (diff1 < diff2 && eventIds[events(1, startIndex - 1)] == eventId)
-                startIndex--;
-            else if (diff1 < diff2 && eventIds[events(1, startIndex - 1)] != eventId && eventIds[events(1, startIndex + 1)] == eventId)
-                startIndex++;
-            else if (diff2 < diff1 && eventIds[events(1, startIndex + 1)] == eventId)
-                startIndex++;
-        }
-    }
+        return closestEventIndex(eventTime, eventId, startIndex);
 
     return startIndex;
 }

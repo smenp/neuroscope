@@ -21,6 +21,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace testutils;
@@ -37,7 +38,7 @@ struct Event
 QString eventFileContent(const QList<Event>& events)
 {
     QString content;
-    for (const Event& event : events)
+    for (const Event& event: events)
         content += QString::number(event.time, 'g', 12) + "\t" + event.description + "\n";
     return content;
 }
@@ -76,7 +77,7 @@ Result requestNext(EventsProvider& provider, std::int64_t startTime, std::int64_
     auto connection = QObject::connect(&provider, &EventsProvider::nextEventDataReady,
                                        [&](Array<dataType>& times, Array<int>& ids, QObject*, QString name, long startingTime)
                                        {
-                                           result = {toMatrix(times), toMatrix(ids), name, startingTime};
+                                           result = { toMatrix(times), toMatrix(ids), name, startingTime };
                                            ++emitted;
                                        });
     provider.requestNextEventData(static_cast<long>(startTime), static_cast<long>(timeFrame), selectedIds, nullptr);
@@ -94,7 +95,7 @@ Result requestPrevious(EventsProvider& provider, std::int64_t startTime, std::in
     auto connection = QObject::connect(&provider, &EventsProvider::previousEventDataReady,
                                        [&](Array<dataType>& times, Array<int>& ids, QObject*, QString name, long startingTime)
                                        {
-                                           result = {toMatrix(times), toMatrix(ids), name, startingTime};
+                                           result = { toMatrix(times), toMatrix(ids), name, startingTime };
                                            ++emitted;
                                        });
     provider.requestPreviousEventData(static_cast<long>(startTime), static_cast<long>(timeFrame), selectedIds, nullptr);
@@ -124,7 +125,7 @@ QString expectedWindow(const QList<Event>& events, const QMap<QString, int>& ids
 
     const double samplesPerMs = samplingRate / 1000.0;
     QStringList result;
-    for (const Event& event : events)
+    for (const Event& event: events)
     {
         const std::int64_t rounded = static_cast<std::int64_t>(std::floor(0.5 + event.time));
         if (rounded < startTime || rounded > endTime)
@@ -137,6 +138,8 @@ QString expectedWindow(const QList<Event>& events, const QMap<QString, int>& ids
 
 } // namespace
 
+Q_DECLARE_METATYPE(Event)
+
 class TestEventsProvider : public QObject
 {
     Q_OBJECT
@@ -146,8 +149,8 @@ class TestEventsProvider : public QObject
     QList<Event> manyEvents;
 
     // Event descriptions are numbered in case-insensitive alphabetical order, starting at 1.
-    const QMap<QString, int> ids = {{"lick", 1}, {"reward", 2}, {"Stim off", 3}, {"stim on", 4}};
-    const QList<Event> fewEvents = {{100.0, "lick"}, {200.0, "reward"}, {500.0, "lick"}, {1500.0, "reward"}, {3000.0, "lick"}};
+    const QMap<QString, int> ids = { { "lick", 1 }, { "reward", 2 }, { "Stim off", 3 }, { "stim on", 4 } };
+    const QList<Event> fewEvents = { { 100.0, "lick" }, { 200.0, "reward" }, { 500.0, "lick" }, { 1500.0, "reward" }, { 3000.0, "lick" } };
 
     QString path(const QString& name) const { return dir.filePath(name); }
 
@@ -163,7 +166,7 @@ class TestEventsProvider : public QObject
         double time = 10.25;
         for (int i = 0; i < 5000; ++i)
         {
-            manyEvents.append({time, descriptions[random.bounded(descriptions.size())]});
+            manyEvents.append({ time, descriptions[random.bounded(descriptions.size())] });
             time += 1.0 + random.bounded(400000) / 1000.0;
         }
         writeTextFile(path("many.abc.evt"), eventFileContent(manyEvents));
@@ -287,7 +290,10 @@ class TestEventsProvider : public QObject
             const QString expected = expectedWindow(manyEvents, ids, startTime, endTime, samplingRate);
             if (actual != expected)
                 QFAIL(qPrintable(QString("request %1: window %2-%3 ms\nactual:   %4\nexpected: %5")
-                                     .arg(i).arg(startTime).arg(endTime).arg(actual, expected)));
+                                     .arg(i)
+                                     .arg(startTime)
+                                     .arg(endTime)
+                                     .arg(actual, expected)));
             if (startTime > fileMaxTime)
                 startTime = 0;
         }
@@ -301,14 +307,14 @@ class TestEventsProvider : public QObject
         const int reward = provider.eventDescriptionIdMap().value(EventDescription("reward"));
 
         // The next reward after 250 ms is at 1500 ms: the window starts at 1250 ms.
-        const Result next = requestNext(provider, 0, 1000, {reward});
+        const Result next = requestNext(provider, 0, 1000, { reward });
         QCOMPARE(next.name, QString("xyz"));
         QCOMPARE(next.startingTime, 1250_i64);
         QCOMPARE(describe(next), QString("(250, %1)").arg(reward));
 
         // The previous reward is at 200 ms; the window cannot start before 0.
         const int lick = provider.eventDescriptionIdMap().value(EventDescription("lick"));
-        const Result previous = requestPrevious(provider, next.startingTime, 1000, {reward});
+        const Result previous = requestPrevious(provider, next.startingTime, 1000, { reward });
         QCOMPARE(previous.startingTime, 0_i64);
         QCOMPARE(describe(previous), QString("(100, %1) (200, %2) (500, %1)").arg(lick).arg(reward));
     }
@@ -368,6 +374,65 @@ class TestEventsProvider : public QObject
         provider.undo();
         QCOMPARE(provider.getNbEvents(), 5);
         QCOMPARE(describe(request(provider, 600, 800)), QString());
+    }
+
+    void removeOneOfCloseEvents_data()
+    {
+        QTest::addColumn<QList<Event>>("events");
+
+        // The events at 10.x ms round to the same millisecond.
+        QTest::newRow("close events in the middle")
+            << QList<Event>{ { 1.0, "lick" }, { 10.1, "lick" }, { 10.3, "reward" }, { 10.45, "lick" }, { 20.0, "reward" }, { 30.0, "lick" } };
+        QTest::newRow("close events at the start") << QList<Event>{ { 10.1, "reward" }, { 10.3, "lick" }, { 10.4, "reward" }, { 20.0, "lick" } };
+        QTest::newRow("close events at the end") << QList<Event>{ { 1.0, "lick" }, { 10.1, "reward" }, { 10.3, "lick" }, { 10.4, "reward" } };
+    }
+
+    // The event removed is the one at the given time, also among events less than a millisecond apart.
+    void removeOneOfCloseEvents()
+    {
+        QFETCH(QList<Event>, events);
+        const double samplingRate = 20000.0;
+        writeTextFile(path("close.cls.evt"), eventFileContent(events));
+        for (int removed = 0; removed < events.size(); ++removed)
+        {
+            EventsProvider provider(path("close.cls.evt"), samplingRate);
+            QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+            QList<Event> remaining = events;
+            const Event event = remaining.takeAt(removed);
+
+            provider.removeEvent(ids[event.description], event.time);
+
+            QVERIFY2(describe(request(provider, 0, 100)) == expectedWindow(remaining, ids, 0, 100, samplingRate),
+                     qPrintable(QString("removing the event at %1 ms").arg(event.time)));
+        }
+    }
+
+    void moveOneOfCloseEvents_data() { removeOneOfCloseEvents_data(); }
+
+    // The event moved is the one at the given time, also among events less than a millisecond apart.
+    void moveOneOfCloseEvents()
+    {
+        QFETCH(QList<Event>, events);
+        const double samplingRate = 20000.0;
+        writeTextFile(path("close.cls.evt"), eventFileContent(events));
+        for (int moved = 0; moved < events.size(); ++moved)
+        {
+            for (double newTime: { 0.5, 15.0, 50.0 })
+            {
+                EventsProvider provider(path("close.cls.evt"), samplingRate);
+                QCOMPARE(provider.loadData(), int(EventsProvider::OK));
+                QList<Event> expected = events;
+                const Event event = expected.takeAt(moved);
+                expected.append({ newTime, event.description });
+                std::sort(expected.begin(), expected.end(), [](const Event& a, const Event& b)
+                          { return a.time < b.time; });
+
+                provider.modifiedEvent(ids[event.description], event.time, newTime);
+
+                QVERIFY2(describe(request(provider, 0, 100)) == expectedWindow(expected, ids, 0, 100, samplingRate),
+                         qPrintable(QString("moving the event at %1 ms to %2 ms").arg(event.time).arg(newTime)));
+            }
+        }
     }
 };
 
