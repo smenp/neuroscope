@@ -15,9 +15,11 @@
  ***************************************************************************/
 
 #include "neuroscopexmlreader.h"
+#include "parameterxmlmodifier.h"
 #include "sessionInformation.h"
 #include "testutils.h"
 
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -224,6 +226,16 @@ class TestNeuroscopeXmlReader : public QObject
         NeuroscopeXmlReader invalid;
         QVERIFY(!invalid.parseFile(path("invalid.xml"), NeuroscopeXmlReader::PARAMETER));
         QVERIFY(!invalid.parseFile(path("missing.xml"), NeuroscopeXmlReader::PARAMETER));
+    }
+
+    // Reading a parameter file, to show it or to update it, prints no warning.
+    void readWithoutWarnings()
+    {
+        QTest::failOnWarning(QRegularExpression(".*"));
+        NeuroscopeXmlReader quiet;
+        QVERIFY(quiet.parseFile(path("session.xml"), NeuroscopeXmlReader::PARAMETER));
+        ParameterXmlModifier modifier;
+        QVERIFY(modifier.parseFile(path("session.xml")));
     }
 };
 
