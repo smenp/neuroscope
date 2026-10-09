@@ -35,3 +35,6 @@ neuroscope_add_app_test(test_neuroscopedoc)
 neuroscope_add_app_test(test_events)
 neuroscope_add_app_test(test_browsing)
 neuroscope_add_app_test(test_channelpalette)
+# The offscreen platform refuses every drag; the minimal one runs drag and drop inside the process.
+set_tests_properties(test_channelpalette PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=minimal;QT_LOGGING_RULES=default.debug=false")

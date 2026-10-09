@@ -19,7 +19,10 @@
 #include "channeliconview.h"
 #include "channelpalette.h"
 
+#include <QApplication>
 #include <QHBoxLayout>
+#include <QThread>
+#include <QTimer>
 #include <QtTest>
 
 #include <memory>
@@ -124,6 +127,48 @@ void select(ChannelPalette* palette, const QList<int>& channels)
         item(palette, channel)->setSelected(true);
 }
 
+QPoint inWindow(ChannelIconView* view, const QPoint& viewportPos)
+{
+    return view->viewport()->mapTo(view->window(), viewportPos);
+}
+
+/** Drags the selected channels of the palette by the item of @p byChannel and drops them on the item of @p ontoChannel. */
+void dragOnto(ChannelPalette* palette, int byChannel, int ontoChannel)
+{
+    QListWidgetItem* handle = item(palette, byChannel);
+    QListWidgetItem* onto = item(palette, ontoChannel);
+    auto* source = static_cast<ChannelIconView*>(handle->listWidget());
+    auto* target = static_cast<ChannelIconView*>(onto->listWidget());
+    QWindow* window = palette->window()->windowHandle();
+    const QPoint press = inWindow(source, source->visualItemRect(handle).center());
+    const QPoint drop = inWindow(target, target->visualItemRect(onto).center());
+
+    // QDrag::exec() runs its own event loop; the drop happens inside it, never in the loop the drag starts from.
+    const int outerLoopLevel = QThread::currentThread()->loopLevel();
+    bool dropped = false;
+    QTimer dropper;
+    dropper.callOnTimeout(window,
+                          [&]()
+                          {
+                              if (QThread::currentThread()->loopLevel() == outerLoopLevel)
+                                  return;
+                              dropper.stop();
+                              QTest::mouseMove(window, drop);
+                              QTest::mouseRelease(window, Qt::LeftButton, {}, drop);
+                              dropped = true;
+                          });
+    dropper.start(0);
+
+    QTest::mousePress(window, Qt::LeftButton, {}, press);
+    // A view may only arm the drag on the first move past the start distance and start it on the next one.
+    const QPoint step(QApplication::startDragDistance() + 1, 0);
+    QTest::mouseMove(window, press + step);
+    if (!dropped)
+        QTest::mouseMove(window, press + 2 * step);
+    QVERIFY2(dropped, "the view did not start a drag");
+    QCoreApplication::processEvents();
+}
+
 } // namespace
 
 class TestChannelPalette : public QObject
@@ -188,6 +233,39 @@ class TestChannelPalette : public QObject
         palettes->display->createGroup();
         verifyConsistent();
         QCOMPARE(shown(palettes->display, 3), (QList<int>{ 1, 2, 3 }));
+    }
+
+    void dragChannels_data()
+    {
+        QTest::addColumn<bool>("spikePalette");
+        QTest::addColumn<QList<int>>("channels");
+        QTest::addColumn<int>("onto");
+        QTest::newRow("several channels to another group") << false << QList<int>{ 0, 2 } << 6;
+        QTest::newRow("within a group") << false << QList<int>{ 0 } << 3;
+        QTest::newRow("in the spike palette") << true << QList<int>{ 4 } << 1;
+    }
+
+    // Dragged channels move to the group of the channel they are dropped on; the other palette is unchanged.
+    void dragChannels()
+    {
+        QFETCH(bool, spikePalette);
+        QFETCH(QList<int>, channels);
+        QFETCH(int, onto);
+        ChannelPalette* palette = spikePalette ? palettes->spike : palettes->display;
+        const QMap<int, int>& groupOf = spikePalette ? palettes->spikeChannels : palettes->displayChannels;
+        const QMap<int, QList<int>>& otherGroups = spikePalette ? palettes->displayGroups : palettes->spikeGroups;
+        const QMap<int, QList<int>> otherGroupsBefore = otherGroups;
+        const int target = groupOf.value(onto);
+        const QList<int> targetBefore = shown(palette, target);
+        select(palette, channels);
+
+        dragOnto(palette, channels.first(), onto);
+
+        verifyConsistent();
+        for (int channel: channels)
+            QCOMPARE(groupOf.value(channel), target);
+        QVERIFY(shown(palette, target) != targetBefore);
+        QCOMPARE(otherGroups, otherGroupsBefore);
     }
 };
 
