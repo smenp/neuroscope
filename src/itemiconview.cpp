@@ -46,7 +46,8 @@ bool ItemWidgetItem::operator<(const QListWidgetItem& other) const
 
 
 ItemIconView::ItemIconView(const QColor& backgroundColor, QListView::ViewMode mode, int gridX, int gridY, QWidget* parent, const QString& name)
-    : QListWidget(parent)
+    : QListWidget(parent),
+      minimumGridWidth(gridX)
 {
     setObjectName(name);
     QFont font("Helvetica", 8);
@@ -132,6 +133,32 @@ void ItemIconView::setNewWidth(int width)
     setFixedWidth(width);
     doItemsLayout();
     resize(sizeHint());
+}
+
+void ItemIconView::fitGridToItems()
+{
+    if (viewMode() != QListView::IconMode)
+        return;
+
+    // The item with the widest label needs the widest cell; its size hint adds the icon and the
+    // margins the style draws around the text.
+    const QFontMetrics metrics(font());
+    int widestRow = -1;
+    int widestAdvance = -1;
+    for (int row = 0; row < count(); ++row)
+    {
+        const int advance = metrics.horizontalAdvance(item(row)->text());
+        if (advance > widestAdvance)
+        {
+            widestAdvance = advance;
+            widestRow = row;
+        }
+    }
+
+    int width = minimumGridWidth;
+    if (widestRow >= 0)
+        width = qMax(width, sizeHintForIndex(model()->index(widestRow, 0)).width());
+    setGridSize(QSize(width, gridSize().height()));
 }
 
 QSize ItemIconView::sizeHint() const

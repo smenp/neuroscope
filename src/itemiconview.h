@@ -52,6 +52,10 @@ class ItemIconView : public QListWidget
 
     void setNewWidth(int width);
 
+    /**In icon mode, widens the grid cells beyond the width given at construction as far as needed to show
+     * every item label in full. Call it after the items have been added.*/
+    void fitGridToItems();
+
     QSize sizeHint() const;
 
 
@@ -68,6 +72,10 @@ class ItemIconView : public QListWidget
     void mouseReleased(const QString& sourceGroup);
     void mousePressMiddleButton(QListWidgetItem*);
     void rowInsered();
+
+  private:
+    /**Grid cell width given at construction, the narrowest the cells get.*/
+    int minimumGridWidth;
 };
 
 #endif

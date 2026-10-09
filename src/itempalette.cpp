@@ -195,6 +195,7 @@ void ItemPalette::updateItemList(const QString& groupName, ItemColors* itemColor
     }
 
     browsingStatus.insert(groupName, browsingMap);
+    iconView->fitGridToItems();
     if (nbItems == 0)
         iconView->resize(50, 20);
     else
