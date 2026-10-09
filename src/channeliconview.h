@@ -57,7 +57,15 @@ class ChannelIconViewItem : public QListWidgetItem
 
     int getID()
     {
-        return data(Qt::UserRole).toInt();
+        return id(this);
+    }
+
+    /**Returns the channel id of any item of a ChannelIconView. Unlike getID(), it may be called on an item
+     * being deleted: the QListWidgetItem destructor, which runs after this class's part is destroyed,
+     * removes the item from its view and so emits the view's selection signals.*/
+    static int id(const QListWidgetItem* item)
+    {
+        return item->data(Qt::UserRole).toInt();
     }
 };
 

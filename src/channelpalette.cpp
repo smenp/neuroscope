@@ -272,10 +272,10 @@ const QList<int> ChannelPalette::selectedChannels()
         const int count(iteratordict.value()->count());
         for (int i = 0; i < count; ++i)
         {
-            ChannelIconViewItem* item = static_cast<ChannelIconViewItem*>(iteratordict.value()->item(i));
+            const QListWidgetItem* item = iteratordict.value()->item(i);
             if (item->isSelected())
             {
-                selectedChannels.append(item->getID());
+                selectedChannels.append(ChannelIconViewItem::id(item));
             }
         }
     }
