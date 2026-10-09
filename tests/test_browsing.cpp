@@ -35,6 +35,7 @@ const std::int64_t NB_SAMPLES = 200000;
 enum class Kind
 {
     Spikes,
+    Events,
 };
 
 } // namespace
@@ -68,6 +69,21 @@ class TestBrowsing : public QObject
                 // Loaded clusters are not browsed until they are enabled for browsing.
                 app->activeView()->updateNoneBrowsingClusterList(id, {});
             }
+            else
+            {
+                const QString id = QString("ev%1").arg(file);
+                QString events;
+                for (const Spike& spike: files[file])
+                {
+                    events += QString("%1\tcluster%2\n").arg(spike.time * 1000 / SAMPLING_RATE).arg(spike.cluster);
+                }
+                const QString eventPath = dir.filePath(QString("%1.%2.evt").arg(baseName, id));
+                writeTextFile(eventPath, events);
+                loadFile(app.get(), "slotLoadEventFiles", eventPath);
+                // The descriptions are numbered from 1 in alphabetical order: cluster2 before cluster3.
+                app->activeView()->shownEventsUpdate(id, { 1 });
+                app->activeView()->updateNoneBrowsingEventList(id, {});
+            }
         }
         QMetaObject::invokeMethod(app->findChild<TraceWidget*>(), "slotSetStartAndDuration", Q_ARG(long, 100), Q_ARG(long, 400));
         return app;
@@ -89,7 +105,7 @@ class TestBrowsing : public QObject
     {
         QTest::addColumn<Kind>("kind");
         QTest::addColumn<QList<Spike>>("other");
-        for (Kind kind: { Kind::Spikes })
+        for (Kind kind: { Kind::Spikes, Kind::Events })
         {
             const char* name = kind == Kind::Spikes ? "spike" : "event";
             QTest::addRow("no later %s", name) << kind << QList<Spike>{ { 3600, 2 } };

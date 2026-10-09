@@ -4724,7 +4724,9 @@ void TraceView::nextEventDataAvailable(Array<dataType>& times, Array<int>& ids, 
     else
         eventData->setStatus(true);
 
-    if (nextEventProvider.first == "" || (nextEventProvider.first != "" && startingTime < nextEventProvider.second))
+    //A provider which found no event returns the current start: it is chosen only if no provider found one.
+    if (nextEventProvider.first.isEmpty() ||
+        (startingTime != startTime && (startingTime < nextEventProvider.second || nextEventProvider.second == startTime)))
     {
         nextEventProvider.first = providerName;
         nextEventProvider.second = startingTime;
