@@ -155,16 +155,34 @@ class TestNeuroscopeXmlReader : public QObject
     {
         QCOMPARE(reader.getScreenGain(), 0.2f);
         QCOMPARE(reader.getTraceBackgroundImage(), QString("background.png"));
-        // Current behaviour: the video settings are only read from a top-level <video> element,
-        // as in session files. The values NeuroScope writes to <neuroscope><video> in parameter files
-        // are not read, and the defaults are returned (#18).
-        QCOMPARE(reader.getRotation(), 0);
-        QCOMPARE(reader.getFlip(), 0);
-        QCOMPARE(reader.getBackgroundImage(), QString("-"));
-        QCOMPARE(reader.getTrajectory(), 0);
+        // Parameter files hold the video settings in <neuroscope><video> (#18).
+        QCOMPARE(reader.getRotation(), 90);
+        QCOMPARE(reader.getFlip(), 1);
+        QCOMPARE(reader.getBackgroundImage(), QString("arena.png"));
+        QCOMPARE(reader.getTrajectory(), 1);
         // For parameter files the spike waveform comes from the NeuroScope section.
         QCOMPARE(reader.getNbSamples(), 40);
         QCOMPARE(reader.getPeakSampleIndex(), 20);
+    }
+
+    void sessionVideoSettings()
+    {
+        // Session files hold the video settings at the top level.
+        writeTextFile(path("video.nrs"), R"(<?xml version='1.0'?>
+<neuroscope version="1.2.2">
+ <video>
+  <rotate>180</rotate>
+  <flip>2</flip>
+  <positionsBackground>1</positionsBackground>
+ </video>
+</neuroscope>
+)");
+        NeuroscopeXmlReader session;
+        QVERIFY(session.parseFile(path("video.nrs"), NeuroscopeXmlReader::SESSION));
+        QCOMPARE(session.getRotation(), 180);
+        QCOMPARE(session.getFlip(), 2);
+        QCOMPARE(session.getTrajectory(), 1);
+        QCOMPARE(session.getBackgroundImage(), QString("-"));
     }
 
     void sampleRateByExtension()

@@ -1274,158 +1274,34 @@ int NeuroscopeXmlReader::getVideoHeight() const
 }
 
 
-int NeuroscopeXmlReader::getRotation() const
+QDomElement NeuroscopeXmlReader::videoSettings() const
 {
-    int angle = 0;
-
-    QDomNode n = documentNode.firstChild();
-    if (!n.isNull())
-    {
-        while (!n.isNull())
-        {
-            QDomElement e = n.toElement(); // try to convert the node to an element.
-            if (!e.isNull())
-            {
-                QString tag = e.tagName();
-                if (tag == VIDEO)
-                {
-                    QDomNode video = e.firstChild(); // try to convert the node to an element.
-                    while (!video.isNull())
-                    {
-                        QDomElement u = video.toElement();
-                        if (!u.isNull())
-                        {
-                            tag = u.tagName();
-                            if (tag == ROTATE)
-                            {
-                                angle = u.text().toInt();
-                                return angle;
-                            }
-                        }
-                        video = video.nextSibling();
-                    }
-                    break;
-                }
-            }
-            n = n.nextSibling();
-        }
-    }
-    return angle;
+    //Parameter files hold the video settings in the NeuroScope section, session files at the top level.
+    QDomElement parent = documentNode.toElement();
+    if (type == PARAMETER)
+        parent = parent.firstChildElement(NEUROSCOPE);
+    return parent.firstChildElement(VIDEO);
 }
 
+int NeuroscopeXmlReader::getRotation() const
+{
+    return videoSettings().firstChildElement(ROTATE).text().toInt();
+}
 
 int NeuroscopeXmlReader::getFlip() const
 {
-    int orientation = 0;
-    QDomNode n = documentNode.firstChild();
-    if (!n.isNull())
-    {
-        while (!n.isNull())
-        {
-            QDomElement e = n.toElement(); // try to convert the node to an element.
-            if (!e.isNull())
-            {
-                QString tag = e.tagName();
-                if (tag == VIDEO)
-                {
-                    QDomNode video = e.firstChild(); // try to convert the node to an element.
-                    while (!video.isNull())
-                    {
-                        QDomElement u = video.toElement();
-                        if (!u.isNull())
-                        {
-                            tag = u.tagName();
-                            if (tag == FLIP)
-                            {
-                                orientation = u.text().toInt();
-                                return orientation;
-                            }
-                        }
-                        video = video.nextSibling();
-                    }
-                    break;
-                }
-            }
-            n = n.nextSibling();
-        }
-    }
-    return orientation;
+    return videoSettings().firstChildElement(FLIP).text().toInt();
 }
 
 int NeuroscopeXmlReader::getTrajectory() const
 {
-    int drawTrajectory = 0;
-    QDomNode n = documentNode.firstChild();
-    if (!n.isNull())
-    {
-        while (!n.isNull())
-        {
-            QDomElement e = n.toElement(); // try to convert the node to an element.
-            if (!e.isNull())
-            {
-                QString tag = e.tagName();
-                if (tag == VIDEO)
-                {
-                    QDomNode video = e.firstChild(); // try to convert the node to an element.
-                    while (!video.isNull())
-                    {
-                        QDomElement u = video.toElement();
-                        if (!u.isNull())
-                        {
-                            tag = u.tagName();
-                            if (tag == POSITIONS_BACKGROUND)
-                            {
-                                drawTrajectory = u.text().toInt();
-                                return drawTrajectory;
-                            }
-                        }
-                        video = video.nextSibling();
-                    }
-                    break;
-                }
-            }
-            n = n.nextSibling();
-        }
-    }
-    return drawTrajectory;
+    return videoSettings().firstChildElement(POSITIONS_BACKGROUND).text().toInt();
 }
 
 QString NeuroscopeXmlReader::getBackgroundImage() const
 {
-    QString backgroundPath = "-";
-    QDomNode n = documentNode.firstChild();
-    if (!n.isNull())
-    {
-        while (!n.isNull())
-        {
-            QDomElement e = n.toElement(); // try to convert the node to an element.
-            if (!e.isNull())
-            {
-                QString tag = e.tagName();
-                if (tag == VIDEO)
-                {
-                    QDomNode video = e.firstChild(); // try to convert the node to an element.
-                    while (!video.isNull())
-                    {
-                        QDomElement u = video.toElement();
-                        if (!u.isNull())
-                        {
-                            tag = u.tagName();
-                            if (tag == VIDEO_IMAGE)
-                            {
-                                backgroundPath = u.text();
-                                return backgroundPath;
-                            }
-                        }
-                        video = video.nextSibling();
-                    }
-                    break;
-                }
-            }
-            n = n.nextSibling();
-        }
-    }
-    return backgroundPath;
+    const QDomElement image = videoSettings().firstChildElement(VIDEO_IMAGE);
+    return image.isNull() ? QString("-") : image.text();
 }
 
 QString NeuroscopeXmlReader::getTraceBackgroundImage() const

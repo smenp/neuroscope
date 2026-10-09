@@ -1569,6 +1569,10 @@ void NeuroscopeDoc::loadDocumentInformation(NeuroscopeXmlReader reader)
         videoHeight = videoHeightRead;
 
     drawPositionsOnBackground = reader.getTrajectory();
+    if (reader.getRotation() != 0)
+        rotation = reader.getRotation();
+    if (reader.getFlip() != 0)
+        flip = reader.getFlip();
 
     //The background image information is stored in the parameter file starting with the version 1.2.3
     if (reader.getType() == NeuroscopeXmlReader::PARAMETER)
