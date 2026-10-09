@@ -96,8 +96,17 @@ class TestPositionsProvider : public QObject
         const Matrix data = request(provider, 0, 10);
         QCOMPARE(data.rows, 1_i64);
         QCOMPARE(data(1, 1), x(0));
-        QEXPECT_FAIL("", "The first line is stored in the first column instead of the first row: its y is not set (#15)", Abort);
         QCOMPARE(data(1, 2), y(0));
+    }
+
+    void singlePosition()
+    {
+        // Fewer lines than coordinates per line (#15).
+        writeTextFile(path("single.pos"), "12 34\n");
+        PositionsProvider provider(path("single.pos"), SAMPLING_RATE, WIDTH, HEIGHT, 0, 0);
+        QCOMPARE(provider.loadData(), int(PositionsProvider::OK));
+        const Matrix data = request(provider, 0, 10);
+        QCOMPARE(data.values, QVector<std::int64_t>({12, 34}));
     }
 
     void inconsistentLinesAreIncorrect()
@@ -139,9 +148,7 @@ class TestPositionsProvider : public QObject
         for (std::int64_t i = 0; i < nbLines; ++i)
         {
             QCOMPARE(data(i + 1, 1), x(firstLine + i));
-            // The y of the first position is not set, see firstPosition() and #15.
-            if (firstLine + i > 0)
-                QCOMPARE(data(i + 1, 2), y(firstLine + i));
+            QCOMPARE(data(i + 1, 2), y(firstLine + i));
         }
     }
 

@@ -91,7 +91,7 @@ int PositionsProvider::loadData()
     positions.setSize(nbPositions, nbCoordinates);
     for (int i = 0; i < nbCoordinates; ++i)
     {
-        positions(i + 1, 1) = static_cast<dataType>(floor(0.5 + lineParts[i].toDouble()));
+        positions(1, i + 1) = static_cast<dataType>(floor(0.5 + lineParts[i].toDouble()));
     }
 
 
