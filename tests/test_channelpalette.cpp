@@ -23,6 +23,7 @@
 #include <QDrag>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QScrollBar>
 #include <QThread>
 #include <QTimer>
 #include <QtTest>
@@ -235,6 +236,14 @@ void dragGroup(ChannelPalette* palette, int id, const std::function<QPoint()>& t
     QCoreApplication::processEvents();
     QVERIFY2(released, "the label did not start a drag");
     QVERIFY2(settled, "the palette kept scrolling under the mouse");
+}
+
+/** Window position halfway between the bottom of the box of group upper and the top of the box of group lower. */
+QPoint between(ChannelPalette* palette, int upper, int lower)
+{
+    const QPoint bottom = inWindow(palette, upper, QPoint(box(palette, upper)->width() / 2, box(palette, upper)->height()));
+    const QPoint top = inWindow(palette, lower, QPoint(box(palette, lower)->width() / 2, 0));
+    return (bottom + top) / 2;
 }
 
 } // namespace
@@ -458,6 +467,68 @@ class TestChannelPalette : public QObject
                   });
         QCOMPARE(dragged, label->grab().toImage());
         QCOMPARE(hotSpot, label->rect().center());
+    }
+
+    void dropGroup_data()
+    {
+        QTest::addColumn<int>("source");
+        QTest::addColumn<std::function<QPoint(ChannelPalette*)>>("drop");
+        QTest::addColumn<bool>("scrolled");
+        QTest::addColumn<QList<int>>("firstChannels");
+        using Drop = std::function<QPoint(ChannelPalette*)>;
+        const auto gap = [](int upper, int lower) { return Drop([=](ChannelPalette* palette) { return between(palette, upper, lower); }); };
+        const auto inBox = [](int id, double height)
+        { return Drop([=](ChannelPalette* palette) { return inWindow(palette, id, QPoint(box(palette, id)->width() / 2, box(palette, id)->height() * height)); }); };
+        // Groups 1 to 4 hold the channels {0, 1}, {2, 3}, {4, 5} and {6, 7}; the trash holds {8, 9}.
+        QTest::newRow("down into gap") << 1 << gap(2, 3) << false << QList<int>{ 2, 0, 4, 6 };
+        QTest::newRow("down below last group") << 3 << gap(4, 0) << false << QList<int>{ 0, 2, 6, 4 };
+        QTest::newRow("up into gap") << 4 << gap(1, 2) << false << QList<int>{ 0, 6, 2, 4 };
+        QTest::newRow("up above first group") << 3 << inBox(1, -0.1) << false << QList<int>{ 4, 0, 2, 6 };
+        QTest::newRow("onto itself") << 2 << inBox(2, 0.75) << false << QList<int>{ 0, 2, 4, 6 };
+        QTest::newRow("scrolled, up into gap") << 4 << gap(2, 3) << true << QList<int>{ 0, 2, 6, 4 };
+    }
+
+    // A dropped group goes after the last group whose middle is above the drop, wherever the palette is scrolled.
+    void dropGroup()
+    {
+        QFETCH(int, source);
+        QFETCH(std::function<QPoint(ChannelPalette*)>, drop);
+        QFETCH(bool, scrolled);
+        QFETCH(QList<int>, firstChannels);
+        showPalettes({ { 0, { 8, 9 } }, { 1, { 0, 1 } }, { 2, { 2, 3 } }, { 3, { 4, 5 } }, { 4, { 6, 7 } } });
+        ChannelPalette* palette = palettes->display;
+        QScrollBar* scrollBar = palette->verticalScrollBar();
+        if (scrolled)
+        {
+            // One group shorter than the groups, so that the palette scrolls by a group.
+            const int excess = palette->widget()->minimumSizeHint().height() - box(palette, 1)->height() - palette->viewport()->height();
+            palettes->window.resize(palettes->window.width(), palettes->window.height() + excess);
+            QTRY_VERIFY(scrollBar->maximum() > 0);
+        }
+        QPoint dropPos;
+        int scrolledAtDrop = 0;
+        dragGroup(
+            palette, source,
+            [&]()
+            {
+                dropPos = drop(palette);
+                scrolledAtDrop = scrollBar->value();
+                return dropPos;
+            },
+            [&](QDrag*)
+            {
+                // Scrolled once the drag has started, since pressing a label near the top of the palette scrolls it up.
+                if (scrolled)
+                    scrollBar->setValue(scrollBar->maximum());
+            });
+        QVERIFY2(palette->viewport()->rect().contains(palette->viewport()->mapFrom(&palettes->window, dropPos)), "the drop is outside the palette");
+        QCOMPARE(scrolledAtDrop > 0, scrolled);
+        verifyConsistent();
+        QList<int> shownFirst;
+        for (int id = 1; id <= 4; ++id)
+            shownFirst << shown(palettes->display, id).value(0, -1);
+        QCOMPARE(shownFirst, firstChannels);
+        QCOMPARE(box(palettes->display, 1)->label()->text(), QString("1"));
     }
 };
 
