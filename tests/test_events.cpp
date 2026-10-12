@@ -158,6 +158,46 @@ class TestEvents : public QObject
             QMetaObject::invokeMethod(app.get(), "removeEvent");
         }
     }
+
+    void undoAnEditAfterAFileIsClosed_data()
+    {
+        QTest::addColumn<bool>("undoBeforeClosing");
+        QTest::newRow("undo") << false;
+        QTest::newRow("redo") << true;
+    }
+
+    // Undo and Redo revert the last edit of an event file; closing that file leaves nothing to revert.
+    void undoAnEditAfterAFileIsClosed()
+    {
+        QFETCH(bool, undoBeforeClosing);
+        auto app = openWithEvents(QString("undo-") + QTest::currentDataTag(), true);
+        QAction* undo = nullptr;
+        QAction* redo = nullptr;
+        for (QAction* action: app->findChildren<QAction*>())
+        {
+            if (action->text() == "Undo")
+                undo = action;
+            if (action->text() == "Redo")
+                redo = action;
+        }
+        QVERIFY(undo && redo);
+        selectAnEvent(app.get());
+        QMetaObject::invokeMethod(app.get(), "removeEvent");
+        QVERIFY(undo->isEnabled());
+        if (undoBeforeClosing)
+        {
+            undo->trigger();
+            QVERIFY(redo->isEnabled());
+        }
+
+        QMetaObject::invokeMethod(app.get(), "slotEventGroupSelected", Q_ARG(QString, "abc"));
+        closeSelectedEventFile(app.get());
+
+        undo->trigger();
+        redo->trigger();
+        QVERIFY(!undo->isEnabled());
+        QVERIFY(!redo->isEnabled());
+    }
 };
 
 QTEST_MAIN(TestEvents)

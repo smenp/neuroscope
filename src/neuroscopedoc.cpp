@@ -238,6 +238,7 @@ void NeuroscopeDoc::closeDocument()
     providerItemColors.clear();
     providerUrls.clear();
     displayGroupsClusterFile.clear();
+    undoRedoProviderName.clear();
 
     if (channelColorList)
     {
@@ -3009,6 +3010,8 @@ void NeuroscopeDoc::removeEventFile(const QString& providerName, NeuroscopeView*
     delete providers.take(providerName);
     delete providerItemColors.take(providerName);
     providerUrls.remove(providerName);
+    if (providerName == undoRedoProviderName)
+        undoRedoProviderName.clear();
 }
 
 void NeuroscopeDoc::eventColorUpdate(const QColor& color, const QString& providerName, int eventId, NeuroscopeView* activeView)

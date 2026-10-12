@@ -3592,13 +3592,17 @@ void NeuroscopeApp::slotCloseEventFile()
             doc->removeEventFile(eventProvider, view, false);
         eventFileList.removeAll(eventProvider);
         eventPalette->removeGroup(eventProvider);
+        if (!doc->hasUndoRedoHistory())
+        {
+            currentNbUndo = 0;
+            currentNbRedo = 0;
+            slotStateChanged("noUndoRedoState");
+        }
 
         if (eventFileList.isEmpty())
         {
             paletteTabsParent->removeTab(paletteTabsParent->indexOf(current));
             eventProvider.clear();
-            currentNbUndo = 0;
-            currentNbRedo = 0;
             delete current;
             slotStateChanged("noEventState");
             showEventsInPositionView->setChecked(false);
@@ -4163,6 +4167,11 @@ void NeuroscopeApp::slotStateChanged(const QString& state)
     }
     else if (state == QLatin1String("emptyRedoState"))
     {
+        mRedo->setEnabled(false);
+    }
+    else if (state == QLatin1String("noUndoRedoState"))
+    {
+        mUndo->setEnabled(false);
         mRedo->setEnabled(false);
     }
     else if (state == QLatin1String("emptyUndoState"))
