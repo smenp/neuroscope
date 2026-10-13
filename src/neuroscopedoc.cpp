@@ -65,6 +65,21 @@ bool isModifiedSince(const QFileInfo& fileInfo, const QDateTime& lastModified)
     return fileInfo.lastModified().toSecsSinceEpoch() != lastModified.toSecsSinceEpoch();
 }
 
+/** The path of a file named in a session file, by plain path or by file URL as NeuroScope 1.3 wrote. */
+QString sessionFilePath(const QUrl& name)
+{
+    return name.path();
+}
+
+/** @p selections, keyed by the paths of the files the session file names. */
+QMap<QString, QList<int>> bySessionFilePath(const QMap<QString, QList<int>>& selections)
+{
+    QMap<QString, QList<int>> result;
+    for (auto it = selections.cbegin(); it != selections.cend(); ++it)
+        result.insert(sessionFilePath(QUrl(it.key())), it.value());
+    return result;
+}
+
 } // namespace
 
 extern QString version;
@@ -1789,6 +1804,8 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
     QStringList loadedEventFiles;
     QString loadedPositionFile;
     QMap<QString, QMap<EventDescription, int>> loadedEventItems;
+    //Path given by the session file for each loaded provider, also if the file has moved next to the session file
+    QMap<QString, QString> sessionFilePaths;
 
     //Get the displays information
     QList<DisplayInformation> displayList = reader.getDisplayInformation();
@@ -1815,12 +1832,12 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
         bool greyMode = static_cast<DisplayInformation>(*iterator).getGreyScale();
         QList<DisplayInformation::spikeDisplayType> spikeDisplayTypes = static_cast<DisplayInformation>(*iterator).getSpikeDisplayTypes();
         int rasterHeight = static_cast<DisplayInformation>(*iterator).getRasterHeight();
-        QMap<QString, QList<int>> selectedClusters = static_cast<DisplayInformation>(*iterator).getSelectedClusters();
+        QMap<QString, QList<int>> selectedClusters = bySessionFilePath(static_cast<DisplayInformation>(*iterator).getSelectedClusters());
         //An id has been assigned to each event, this id will be used internally in NeuroScope and in the session file.
-        QMap<QString, QList<int>> selectedEvents = static_cast<DisplayInformation>(*iterator).getSelectedEvents();
+        QMap<QString, QList<int>> selectedEvents = bySessionFilePath(static_cast<DisplayInformation>(*iterator).getSelectedEvents());
         //QStringList shownSpikeFiles = static_cast<DisplayInformation>(*iterator).getSelectedSpikeFiles();
-        QMap<QString, QList<int>> skippedClusters = static_cast<DisplayInformation>(*iterator).getSkippedClusters();
-        QMap<QString, QList<int>> skippedEvents = static_cast<DisplayInformation>(*iterator).getSkippedEvents();
+        QMap<QString, QList<int>> skippedClusters = bySessionFilePath(static_cast<DisplayInformation>(*iterator).getSkippedClusters());
+        QMap<QString, QList<int>> skippedEvents = bySessionFilePath(static_cast<DisplayInformation>(*iterator).getSkippedEvents());
         QList<TracePosition> positions = static_cast<DisplayInformation>(*iterator).getPositions();
         QList<int> channelIds = static_cast<DisplayInformation>(*iterator).getChannelIds();
         QList<int> selectedChannelIds = static_cast<DisplayInformation>(*iterator).getSelectedChannelIds();
@@ -1892,7 +1909,8 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
             for (sessionIterator = filesToLoad.begin(); sessionIterator != filesToLoad.end(); ++sessionIterator)
             {
                 SessionFile sessionFile = static_cast<SessionFile>(*sessionIterator);
-                QString fileUrl = sessionFile.getUrl().path();
+                const QString sessionPath = sessionFilePath(sessionFile.getUrl());
+                QString fileUrl = sessionPath;
                 SessionFile::type fileType = sessionFile.getType();
                 QDateTime lastModified = sessionFile.getModification();
                 QMap<EventDescription, QColor> itemColors = sessionFile.getItemColors();
@@ -1903,19 +1921,14 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
                     QFileInfo fileInfo = QFileInfo(fileUrl);
                     if (!fileInfo.exists())
                     {
-                        QList<int> ids = selectedClusters[fileUrl];
-                        QList<int> skippedIds = skippedClusters[fileUrl];
-                        selectedClusters.remove(fileUrl);
-                        skippedClusters.remove(fileUrl);
                         QString fileName = QFileInfo(fileUrl).fileName();
                         fileUrl = QFileInfo(sessionUrl).absolutePath() + QDir::separator() + fileName;
-                        selectedClusters.insert(fileUrl, ids);
-                        skippedClusters.insert(fileUrl, skippedIds);
                     }
                     OpenSaveCreateReturnMessage status = loadClusterFileForSession(fileUrl, itemColors, lastModified, fistClusterFile);
                     if (status == OK)
                     {
                         loadedClusterFiles.append(lastLoadedProvider);
+                        sessionFilePaths.insert(lastLoadedProvider, sessionPath);
                         fistClusterFile = false;
                     }
                 }
@@ -1926,19 +1939,14 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
                     QFileInfo fileInfo = QFileInfo(fileUrl);
                     if (!fileInfo.exists())
                     {
-                        QList<int> ids = selectedEvents[fileUrl];
-                        QList<int> skippedIds = skippedEvents[fileUrl];
-                        selectedEvents.remove(fileUrl);
-                        skippedEvents.remove(fileUrl);
                         QString fileName = QFileInfo(fileUrl).fileName();
                         fileUrl = QFileInfo(sessionUrl).absolutePath() + QDir::separator() + fileName;
-                        selectedEvents.insert(fileUrl, ids);
-                        skippedEvents.insert(fileUrl, skippedIds);
                     }
                     OpenSaveCreateReturnMessage status = loadEventFileForSession(fileUrl, itemColors, lastModified, fistEventFile);
                     if (status == OK)
                     {
                         loadedEventFiles.append(lastLoadedProvider);
+                        sessionFilePaths.insert(lastLoadedProvider, sessionPath);
                         fistEventFile = false;
                         QMap<EventDescription, int> loadedItems;
                         QMap<EventDescription, QColor>::ConstIterator it;
@@ -2013,7 +2021,7 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
         for (providerIterator = loadedClusterFiles.begin(); providerIterator != loadedClusterFiles.end(); ++providerIterator)
         {
             QString name = *providerIterator;
-            QString fileURL = providerUrls[name];
+            const QString fileURL = sessionFilePaths.value(name);
             QList<int> clustersIds;
             QList<int> clustersIdsToSkip;
             QList<int> ids = selectedClusters[fileURL];
@@ -2042,7 +2050,7 @@ void NeuroscopeDoc::loadSession(NeuroscopeXmlReader reader)
         for (providerIterator = loadedEventFiles.begin(); providerIterator != loadedEventFiles.end(); ++providerIterator)
         {
             QString name = *providerIterator;
-            QString fileURL = providerUrls[name];
+            const QString fileURL = sessionFilePaths.value(name);
             QList<int> eventsIds;
             QList<int> eventsIdsToSkip;
             QList<int> ids = selectedEvents[fileURL];

@@ -209,6 +209,11 @@ class TestNeuroscopeDoc : public QObject
         QTest::addColumn<QString>("scheme");
         QTest::addColumn<bool>("moved");
         QTest::newRow("paths") << "" << false;
+        // NeuroScope 1.3 named the files by URL.
+        QTest::newRow("file URLs") << "file://" << false;
+        // A session looks for files no longer at their path next to the session file.
+        QTest::newRow("paths of moved files") << "" << true;
+        QTest::newRow("file URLs of moved files") << "file://" << true;
     }
 
     // Every display of a session shows and browses the clusters and events it was saved with.
