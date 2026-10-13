@@ -203,6 +203,62 @@ class TestNeuroscopeDoc : public QObject
 
         QVERIFY(!app->getDocument()->isADocumentToClose());
     }
+
+    void restoreTheSelections_data()
+    {
+        QTest::addColumn<QString>("scheme");
+        QTest::addColumn<bool>("moved");
+        QTest::newRow("paths") << "" << false;
+    }
+
+    // Every display of a session shows and browses the clusters and events it was saved with.
+    void restoreTheSelections()
+    {
+        QFETCH(QString, scheme);
+        QFETCH(bool, moved);
+        const QDir recordingDir(dir.filePath(QString("selections-%1").arg(QTest::currentDataTag()).replace(' ', '-')));
+        QVERIFY(recordingDir.mkpath("."));
+        const QString datPath = writeRecording(recordingDir, "selections", NB_CHANNELS, SAMPLING_RATE, NB_SAMPLES);
+        const QString clusterPath = writeClusterFile(recordingDir, "selections", 1, { { 100, 1 }, { 2000, 2 }, { 5000, 3 } });
+        const QString eventPath = recordingDir.filePath("selections.abc.evt");
+        writeTextFile(eventPath, "10\tlick\n20\treward\n");
+        const QString savedDir = moved ? recordingDir.filePath("moved-away") : recordingDir.absolutePath();
+        const auto saved = [&](const QString& path) -> QString { return scheme + savedDir + "/" + QFileInfo(path).fileName(); };
+        const auto file = [](int type, const QString& url, const QString& path, const QStringList& items) -> QString
+        {
+            QString file = QString("<file><type>%1</type><url>%2</url><modificationDate>%3</modificationDate><items>")
+                               .arg(type)
+                               .arg(url, QFileInfo(path).lastModified().toString(Qt::ISODate));
+            for (const QString& item: items)
+                file += QString("<itemDescription><item>%1</item><color>#ff0000</color></itemDescription>").arg(item);
+            return file + "</items></file>";
+        };
+        // The structure of the session files of NeuroScope 1.3: clusters 2 and 3 and events 1 and 2 are shown,
+        // cluster 3 and event 2 are not browsed.
+        const QString display = QString("<display><clustersSelected><fileUrl>%1</fileUrl><cluster>2</cluster><cluster>3</cluster></clustersSelected>"
+                                        "<eventsSelected><fileUrl>%2</fileUrl><event>1</event><event>2</event></eventsSelected>"
+                                        "<clustersSkipped><fileUrl>%1</fileUrl><cluster>3</cluster></clustersSkipped>"
+                                        "<eventsSkipped><fileUrl>%2</fileUrl><event>2</event></eventsSkipped></display>")
+                                    .arg(saved(clusterPath), saved(eventPath));
+        writeTextFile(recordingDir.filePath("selections.nrs"),
+                      QString("<?xml version='1.0'?><neuroscope version=\"1.3.3\"><files>%1%2</files><displays>%3%3</displays></neuroscope>")
+                          .arg(file(0, saved(clusterPath), clusterPath, { "1", "2", "3" }), file(2, saved(eventPath), eventPath, { "lick", "reward" }), display));
+        MessageBoxRecorder messages;
+
+        auto app = testutils::openRecording(datPath);
+
+        QVERIFY2(messages.texts.isEmpty(), qPrintable(messages.texts.join('\n')));
+        const QList<NeuroscopeView*> views = app->findChildren<NeuroscopeView*>();
+        QCOMPARE(views.size(), 2);
+        for (NeuroscopeView* view: views)
+        {
+            QCOMPARE(*view->getSelectedClusters("1"), QList<int>({ 2, 3 }));
+            // Clusters that are not shown are not browsed either.
+            QCOMPARE(*view->getClustersNotUsedForBrowsing("1"), QList<int>({ 1, 3 }));
+            QCOMPARE(*view->getSelectedEvents("abc"), QList<int>({ 1, 2 }));
+            QCOMPARE(*view->getEventsNotUsedForBrowsing("abc"), QList<int>({ 2 }));
+        }
+    }
 };
 
 QTEST_MAIN(TestNeuroscopeDoc)

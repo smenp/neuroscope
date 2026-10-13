@@ -1623,10 +1623,9 @@ QList<DisplayInformation> NeuroscopeXmlReader::getDisplayInformation()
                                                     {
                                                         clusterFile.append(eventsElement.text());
                                                     }
-                                                    else if (tag == EVENT)
+                                                    else if (tag == CLUSTER)
                                                     {
-                                                        int eventId = eventsElement.text().toInt();
-                                                        clusterIds.append(eventId);
+                                                        clusterIds.append(eventsElement.text().toInt());
                                                     }
                                                 }
                                                 eventsNode = eventsNode.nextSibling();
