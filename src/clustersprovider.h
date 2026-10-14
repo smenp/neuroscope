@@ -116,14 +116,6 @@ class ClustersProvider : public DataProvider
     void updateSamplingRate(double rate)
     {
         dataCurrentRatio = static_cast<float>(samplingRate / rate);
-
-        //Initialize the variables
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = nbSpikes;
-        double maxTime = static_cast<double>(static_cast<double>(clusters(2, nbSpikes)) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-        previousEndTime = static_cast<dataType>(floor(0.5 + maxTime));
-        fileMaxTime = previousEndTime;
     }
 
     /**Updates the acquisition system sampling rate.
@@ -134,14 +126,7 @@ class ClustersProvider : public DataProvider
     {
         samplingRate = rate;
         dataCurrentRatio = static_cast<float>(samplingRate / currentSamplingRate);
-
-        //Initialize the variables
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = nbSpikes;
-        double maxTime = static_cast<double>(static_cast<double>(clusters(2, nbSpikes)) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-        previousEndTime = static_cast<dataType>(floor(0.5 + maxTime));
-        fileMaxTime = previousEndTime;
+        updateFileMaxTime();
     }
 
   Q_SIGNALS:
@@ -186,18 +171,6 @@ class ClustersProvider : public DataProvider
     /**A 2 line array containing the cluster ids and the spikes time.*/
     Array<dataType> clusters;
 
-    /**The start time for the previously requested data.*/
-    long previousStartTime;
-
-    /**The end time for the previously requested data.*/
-    long previousEndTime;
-
-    /**The start index for the previously requested data.*/
-    long previousStartIndex;
-
-    /**The end index for the previously requested data.*/
-    long previousEndIndex;
-
     /**Number of spikes.*/
     long nbSpikes;
 
@@ -228,6 +201,49 @@ class ClustersProvider : public DataProvider
   * @param startTimeInRecordingUnits begining of the time interval from which to retrieve  the data in recording units.
   */
     void retrieveData(long startTime, long endTime, QObject* initiator, long startTimeInRecordingUnits);
+
+    /**Sets fileMaxTime from the time of the last spike.*/
+    void updateFileMaxTime()
+    {
+        fileMaxTime = static_cast<long>(floor(0.5 + clusters(2, nbSpikes) * 1000.0 / samplingRate));
+    }
+
+    /**Returns the first sample of a window in recording units.
+  * @param startTime beginning of the window in milliseconds.
+  * @param startTimeInRecordingUnits beginning of the window at the sampling rate of the current file, 0 if not known.
+  */
+    dataType windowStart(long startTime, long startTimeInRecordingUnits) const;
+
+    /**Gets the spikes from @p start to @p end, in recording units.
+  * @param start first sample of the window.
+  * @param end last sample of the window.
+  * @param data receives the sample of each spike from @p start, at the sampling rate of the current file, and its cluster id.
+  */
+    void spikesInWindow(dataType start, dataType end, Array<dataType>& data);
+
+    /**Returns the index of the first spike at or after @p time, in recording units, nbSpikes + 1 if there is none.
+  * @param time time in recording units.
+  */
+    long firstSpikeAtOrAfter(dataType time);
+
+    /**Returns the index of the first spike after @p time, in recording units, nbSpikes + 1 if there is none.
+  * @param time time in recording units.
+  */
+    long firstSpikeAfter(dataType time);
+
+    /**Finds the next or previous spike of a cluster in @p selectedIds and the window showing it.
+  * @param startTime beginning of the current window in milliseconds.
+  * @param timeFrame duration of the window in milliseconds.
+  * @param selectedIds ids of the clusters to browse.
+  * @param startTimeInRecordingUnits beginning of the current window at the sampling rate of the current file, 0 if not known.
+  * @param forward true for the next spike, false for the previous one.
+  * @param data receives the spikes of the window, as spikesInWindow() gives them.
+  * @param startingTime receives the beginning of the window in milliseconds, @p startTime if there is no spike.
+  * @param startingTimeInRecordingUnits receives the beginning of the window at the sampling rate of the current file,
+  * @p startTimeInRecordingUnits if there is no spike.
+  */
+    void browse(long startTime, long timeFrame, const QList<int>& selectedIds, long startTimeInRecordingUnits, bool forward,
+                Array<dataType>& data, long& startingTime, long& startingTimeInRecordingUnits);
 };
 
 

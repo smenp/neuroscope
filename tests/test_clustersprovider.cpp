@@ -58,7 +58,7 @@ struct Result
     std::int64_t startingTimeInRecordingUnits = -1;
 };
 
-Result request(ClustersProvider& provider, std::int64_t startTime, std::int64_t endTime)
+Result request(ClustersProvider& provider, std::int64_t startTime, std::int64_t endTime, std::int64_t startTimeInRecordingUnits = 0)
 {
     Result result;
     int emitted = 0;
@@ -69,7 +69,7 @@ Result request(ClustersProvider& provider, std::int64_t startTime, std::int64_t 
                                            result.name = name;
                                            ++emitted;
                                        });
-    provider.requestData(static_cast<long>(startTime), static_cast<long>(endTime), nullptr, 0);
+    provider.requestData(static_cast<long>(startTime), static_cast<long>(endTime), nullptr, static_cast<long>(startTimeInRecordingUnits));
     QObject::disconnect(connection);
     if (emitted != 1)
         qFatal("dataReady emitted %d times", emitted);
@@ -174,7 +174,6 @@ class TestClustersProvider : public QObject
     {
         QVERIFY(dir.isValid());
 
-        // More than 1000 spikes, so that the bisection in the window search is used.
         QRandomGenerator random(42);
         const QList<int> clusters = {0, 1, 2, 5};
         std::int64_t time = 100;
@@ -259,9 +258,8 @@ class TestClustersProvider : public QObject
 
     void browseWindows()
     {
-        // The provider remembers the previous window to speed up the search. Request a sequence of
-        // windows (paging forward, jumping around, changing the duration) and compare each with the
-        // spikes computed directly from the files.
+        // Request a sequence of windows (paging forward, jumping around, changing the duration) and compare each with
+        // the spikes computed directly from the files.
         QFETCH(double, currentSamplingRate);
 
         ClustersProvider provider(path("many.clu.1"), SAMPLING_RATE, currentSamplingRate, 0);
@@ -329,6 +327,83 @@ class TestClustersProvider : public QObject
         QVERIFY(next.data.isEmpty());
         QCOMPARE(next.startingTime, 500_i64);
         QCOMPARE(next.startingTimeInRecordingUnits, 10000_i64);
+    }
+
+    void browseEverySpike_data()
+    {
+        QTest::addColumn<double>("currentSamplingRate");
+        QTest::newRow(".dat sampling rate") << SAMPLING_RATE;
+        QTest::newRow(".eeg sampling rate") << 1250.0;
+    }
+
+    // Next Spike, pressed until the window stays, moves the window each time and ends on the last spike; Previous Spike
+    // then goes back to the first one. Spikes that share a window start are one step.
+    void browseEverySpike()
+    {
+        QFETCH(double, currentSamplingRate);
+
+        const long timeFrame = 1000;
+        // Spikes of the browsed clusters 2 and 4, some at the same sample, one sample or less than 1 ms apart, among
+        // spikes of cluster 3.
+        QList<Spike> spikes = {{10, 2}};
+        for (int i = 1; i < 100; ++i)
+        {
+            spikes << Spike{i * 6743, 2} << Spike{i * 6743, 4} << Spike{i * 6743 + 1, 4} << Spike{i * 6743 + 5, 3}
+                   << Spike{i * 6743 + 13, 2};
+        }
+        writeClusterFiles(path("steps.clu.6"), path("steps.res.6"), spikes, 3);
+        ClustersProvider provider(path("steps.clu.6"), SAMPLING_RATE, currentSamplingRate, 100000000, 25);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
+        const auto shows = [&](const Result& window, const Spike& spike)
+        {
+            const double time = spike.time * 1000.0 / SAMPLING_RATE;
+            return window.startingTime <= time && time <= window.startingTime + timeFrame;
+        };
+        const auto stays = [](const Result& window, const Result& browsed)
+        { return browsed.startingTime == window.startingTime && browsed.startingTimeInRecordingUnits == window.startingTimeInRecordingUnits; };
+        // The trace view reads the window it browsed to.
+        const auto readAsTheViewDoes = [&](const Result& window)
+        { request(provider, window.startingTime, window.startingTime + timeFrame, window.startingTimeInRecordingUnits); };
+
+        Result window;
+        window.startingTime = 0;
+        window.startingTimeInRecordingUnits = 0;
+        for (int i = 0;; ++i)
+        {
+            QVERIFY(i < spikes.size());
+            const Result next = requestNext(provider, window.startingTime, timeFrame, {2, 4}, window.startingTimeInRecordingUnits);
+            if (stays(window, next))
+            {
+                break;
+            }
+            QVERIFY(next.startingTimeInRecordingUnits > window.startingTimeInRecordingUnits);
+            window = next;
+            readAsTheViewDoes(window);
+        }
+        QVERIFY(shows(window, spikes.last()));
+
+        for (int i = 0;; ++i)
+        {
+            QVERIFY(i < spikes.size());
+            const Result previous = requestPrevious(provider, window.startingTime, timeFrame, {2, 4}, window.startingTimeInRecordingUnits);
+            if (stays(window, previous))
+            {
+                break;
+            }
+            QVERIFY(previous.startingTimeInRecordingUnits < window.startingTimeInRecordingUnits);
+            window = previous;
+            readAsTheViewDoes(window);
+        }
+        QVERIFY(shows(window, spikes.first()));
+    }
+
+    // Reading again the window of a .eeg file that Next Spike went to gives its spikes.
+    void readTheWindowBrowsedTo()
+    {
+        ClustersProvider provider(path("few.clu.2"), SAMPLING_RATE, 1250.0, 100000000, 25);
+        QCOMPARE(provider.loadData(), int(ClustersProvider::OK));
+        const Result next = requestNext(provider, 0, 1000, {3}, 0);
+        QCOMPARE(describe(request(provider, next.startingTime, next.startingTime + 1000, next.startingTimeInRecordingUnits).data), describe(next.data));
     }
 };
 

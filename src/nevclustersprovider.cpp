@@ -47,12 +47,7 @@ NEVClustersProvider::NEVClustersProvider(unsigned int channel, Array<dataType>& 
     }
     this->nbClusters = clusterIds.size();
 
-    //Initialize the variables
-    this->previousStartTime = 0;
-    this->previousStartIndex = 1;
-    this->previousEndIndex = this->nbSpikes;
-    this->previousEndTime = (clusters(2, this->nbSpikes) * 1000.0 / samplingRate) + 0.5;
-    this->fileMaxTime = this->previousEndTime;
+    this->updateFileMaxTime();
 }
 
 

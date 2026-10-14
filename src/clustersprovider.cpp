@@ -23,6 +23,9 @@
 #include <QMap>
 #include <QDebug>
 
+#include <algorithm>
+#include <limits>
+
 //include files for the application
 #include "clustersprovider.h"
 #include "timer.h"
@@ -86,12 +89,6 @@ int ClustersProvider::loadData()
     if (nbSpikes == 0)
     {
         clusters.setSize(0, 0);
-
-        //Initialize the variables
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = 1;
-        previousEndTime = 0;
         fileMaxTime = 0;
 
         return OK;
@@ -202,13 +199,7 @@ int ClustersProvider::loadData()
 
     qDebug() << "Loading clu file into memory: " << Timer() << "\n";
 
-    //Initialize the variables
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = nbSpikes;
-    double maxTime = static_cast<double>(static_cast<double>(clusters(2, nbSpikes)) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    previousEndTime = static_cast<dataType>(floor(0.5 + maxTime));
-    fileMaxTime = previousEndTime;
+    updateFileMaxTime();
 
     return OK;
 }
@@ -220,829 +211,115 @@ void ClustersProvider::requestData(long startTime, long endTime, QObject* initia
 
 void ClustersProvider::retrieveData(long startTime, long endTime, QObject* initiator, long startTimeInRecordingUnits)
 {
+    //A window reaching the time of the last spike, rounded to the millisecond, ends with it.
+    const dataType end = endTime >= fileMaxTime ? std::numeric_limits<dataType>::max() : static_cast<dataType>(endTime * (samplingRate / 1000.0));
     Array<dataType> data;
-
-    //qDebug()<<" in retrieveData, startTime " <<startTime<<" endTime " <<endTime<<" startTimeInRecordingUnits "<<startTimeInRecordingUnits;
-
-    //qDebug()<<" in retrieveData, fileMaxTime " <<fileMaxTime<<" samplingRate " <<samplingRate;
-
-
-    if (startTime > fileMaxTime)
-    {
-        //Send the information to the receiver.
-        emit dataReady(data, initiator, name);
-        return;
-    }
-    if (endTime > fileMaxTime)
-        endTime = fileMaxTime;
-
-
-    //Convert the time in miliseconds to time in recording units if need it.
-    dataType startInRecordingUnits;
-    //startTimeInRecordingUnits has been computed in a previous call to a browsing function. It has to be used insted of computing
-    //the value from startTime because of the rounding which has been applied to it.
-    if (startTimeInRecordingUnits != 0)
-        startInRecordingUnits = startTimeInRecordingUnits;
-    else
-        startInRecordingUnits = static_cast<dataType>(startTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-    dataType endInRecordingUnits;
-    //Hack to be sure not to forget a spike due to conversion rounding
-    if (endTime == fileMaxTime)
-        endInRecordingUnits = clusters(2, nbSpikes);
-    else
-        endInRecordingUnits = static_cast<dataType>(endTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    long startIndex;
-    long endIndex;
-    long dicotomyBreak = 1000;
-    long time;
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-            if (endTime <= previousStartTime)
-                endIndex = previousStartIndex;
-            else if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbSpikes;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-
-            if (endTime <= previousStartTime)
-                endIndex = previousStartIndex;
-            else if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbSpikes;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-            if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbSpikes;
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-            endIndex = nbSpikes;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = clusters(2, newStartIndex);
-            if (time == startInRecordingUnits)
-                break;
-            else if (time > startInRecordingUnits)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    break;
-                }
-            }
-        }
-
-        //look up for the startIndex index by index
-        time = clusters(2, newStartIndex);
-
-        if (time < startInRecordingUnits && (newStartIndex < nbSpikes))
-        {
-            while (time < startInRecordingUnits)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                }
-            }
-        }
-        else if (time > startInRecordingUnits && (newStartIndex > 1))
-        {
-            while (time > startInRecordingUnits)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                    if (time < startInRecordingUnits)
-                    {
-                        newStartIndex++;
-                        time = clusters(2, newStartIndex);
-                        break;
-                    }
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (clusters(2, previousEndIndex) < startInRecordingUnits)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbSpikes)
-                    startIndex = nbSpikes;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-
-        if (endTime <= previousEndTime)
-            endIndex = previousEndIndex;
-        else if (endTime > previousEndTime)
-            endIndex = nbSpikes;
-    }
-
-    //Store the information for the next request
-    previousStartTime = startTime;
-    previousStartIndex = startIndex;
-
-    //look up for the cluster ids and indexes.
-    //The exact size (<=> number of spikes is not known yet, so the size of data is set to the maximum possible)
-    data.setSize(2, (endIndex - startIndex + 1)); //line 1 sample index,line 2 clusterId
-    time = clusters(2, startIndex);
-
-    long count = 0;
-    if (dataCurrentRatio != 1)
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            double currentTime = static_cast<double>(time - startInRecordingUnits) / static_cast<double>(dataCurrentRatio);
-            data(1, count + 1) = static_cast<dataType>(floor(0.5 + currentTime));
-            data(2, count + 1) = clusters(1, startIndex);
-
-            //if(data(2,count + 1) ==9 || data(2,count + 1) == 8)qDebug()<<" in retrieveData, data(1,count + 1) " <<data(1,count + 1)<<" data(2,count + 1) " <<data(2,count + 1)<<endl;
-
-
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-    else
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            data(1, count + 1) = time - startInRecordingUnits;
-            data(2, count + 1) = clusters(1, startIndex);
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-
-
-    qDebug() << " in retrieveData, count " << count << " startInRecordingUnits " << startInRecordingUnits << " endInRecordingUnits " << endInRecordingUnits << " endTime " << endTime << "\n";
-
-
-    //Store the data in a array of the good size
-    Array<dataType> finalData;
-    finalData.setSize(2, count);
-    finalData.copySubset(data, count);
-
-    //Store the information for the next request
-    previousEndTime = endTime;
-    previousEndIndex = startIndex - 1;
+    spikesInWindow(windowStart(startTime, startTimeInRecordingUnits), end, data);
 
     //Send the information to the receiver.
-    emit dataReady(finalData, initiator, name);
+    emit dataReady(data, initiator, name);
+}
+
+dataType ClustersProvider::windowStart(long startTime, long startTimeInRecordingUnits) const
+{
+    //After spike browsing, startTimeInRecordingUnits is the start of the window at the sampling rate of the current file,
+    //which startTime only gives rounded to the millisecond.
+    if (startTimeInRecordingUnits != 0)
+    {
+        return static_cast<dataType>(floor(0.5 + startTimeInRecordingUnits * static_cast<double>(dataCurrentRatio)));
+    }
+    return static_cast<dataType>(startTime * (samplingRate / 1000.0));
+}
+
+void ClustersProvider::spikesInWindow(dataType start, dataType end, Array<dataType>& data)
+{
+    const long first = firstSpikeAtOrAfter(start);
+    const long count = qMax(firstSpikeAfter(end) - first, 0L);
+    data.setSize(2, count); //line 1 sample index in the current file, line 2 cluster id
+    for (long i = 1; i <= count; ++i)
+    {
+        data(1, i) = static_cast<dataType>(floor(0.5 + (clusters(2, first + i - 1) - start) / static_cast<double>(dataCurrentRatio)));
+        data(2, i) = clusters(1, first + i - 1);
+    }
+}
+
+long ClustersProvider::firstSpikeAtOrAfter(dataType time)
+{
+    dataType* const begin = nbSpikes == 0 ? nullptr : &clusters(2, 1);
+    return 1 + (std::lower_bound(begin, begin + nbSpikes, time) - begin);
+}
+
+long ClustersProvider::firstSpikeAfter(dataType time)
+{
+    dataType* const begin = nbSpikes == 0 ? nullptr : &clusters(2, 1);
+    return 1 + (std::upper_bound(begin, begin + nbSpikes, time) - begin);
+}
+
+void ClustersProvider::browse(long startTime, long timeFrame, const QList<int>& selectedIds, long startTimeInRecordingUnits, bool forward,
+                              Array<dataType>& data, long& startingTime, long& startingTimeInRecordingUnits)
+{
+    //The spike browsed to is placed clusterPosition into the window, and the window is identified by its first sample in the
+    //current file. Browsing goes to the nearest spike whose window starts after, or before, the current one, so that the
+    //window always moves.
+    const dataType timeFrameInRecordingUnits = static_cast<dataType>(timeFrame * (samplingRate / 1000.0));
+    const long position = static_cast<long>(static_cast<float>(timeFrameInRecordingUnits) * clusterPosition);
+    const auto startOfWindow = [&](dataType spikeTime)
+    {
+        dataType start = qMax(spikeTime - position, 0L);
+        //Going forward, the window keeps its length at the end of the recording.
+        if (forward && start + timeFrameInRecordingUnits > dataFileMaxTime)
+        {
+            start = dataFileMaxTime - timeFrameInRecordingUnits;
+        }
+        return start;
+    };
+    const auto inCurrentFile = [&](dataType time) { return static_cast<dataType>(floor(0.5 + time / static_cast<double>(dataCurrentRatio))); };
+    const dataType current = inCurrentFile(windowStart(startTime, startTimeInRecordingUnits));
+
+    dataType* const begin = nbSpikes == 0 ? nullptr : &clusters(2, 1);
+    long index = 1 + (std::partition_point(begin, begin + nbSpikes, [&](dataType time)
+                                           { return forward ? inCurrentFile(startOfWindow(time)) <= current : inCurrentFile(startOfWindow(time)) < current; }) -
+                      begin);
+    const long step = forward ? 1 : -1;
+    if (!forward)
+    {
+        --index;
+    }
+    while (index >= 1 && index <= nbSpikes && !selectedIds.contains(clusters(1, index)))
+    {
+        index += step;
+    }
+
+    //Without a spike, the start is returned unchanged.
+    startingTime = startTime;
+    startingTimeInRecordingUnits = startTimeInRecordingUnits;
+    if (index < 1 || index > nbSpikes)
+    {
+        return;
+    }
+    const dataType start = startOfWindow(clusters(2, index));
+    startingTime = static_cast<long>(floor(0.5 + start * 1000.0 / samplingRate));
+    startingTimeInRecordingUnits = inCurrentFile(start);
+    //The window shown starts on a sample of the current file.
+    const dataType shownStart = windowStart(startingTime, startingTimeInRecordingUnits);
+    spikesInWindow(shownStart, start + timeFrameInRecordingUnits, data);
 }
 
 void ClustersProvider::requestNextClusterData(long startTime, long timeFrame, const QList<int>& selectedIds, QObject* initiator, long startTimeInRecordingUnits)
 {
-    long initialStartTime = startTime;
-    //Compute the start time for the spike look up
-    startTime = initialStartTime + static_cast<long>(timeFrame * clusterPosition);
-
-    qDebug() << "timeFrame " << timeFrame << " clusterPosition " << clusterPosition << " initialStartTime " << initialStartTime << " startTime " << startTime << " startTime " << startTime << " startTimeInRecordingUnits " << startTimeInRecordingUnits;
-
-    //first look up for the index corresponding to the startTime and then for the first valid spike (contained in selectedIds)
-    //after that time
     Array<dataType> data;
-
-    if (startTime > fileMaxTime)
-    {
-        //Send the information to the receiver.
-        emit dataReady(data, initiator, name);
-        return;
-    }
-
-    long startIndex = previousStartIndex;
-    //By default we will go up to the end of the file
-    long endIndex = nbSpikes;
-    long dicotomyBreak = 1000;
-    long time;
-
-
-    //Convert the time in miliseconds to time in recording units (to compare it with the data from the file) if need it.
-    dataType startInRecordingUnits;
-    //startTimeInRecordingUnits has been computed in a previous call to a browsing function. It has to be used insted of computing
-    //the value from startTime because of the rounding which has been applied to it.
-    if (startTimeInRecordingUnits != 0)
-    {
-        //the found spike will be placed at clusterPosition*100 % of the timeFrame
-        dataType timeFrameInRecordingUnits = static_cast<dataType>(timeFrame * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-        float position = static_cast<float>(timeFrameInRecordingUnits) * clusterPosition;
-        //startTimeInRecordingUnits is given in recording units computed with the current sampling rate, it has to be converted in
-        //the recording units corresponding to the acquisiton system sampling rate (unit used in the cluster file).
-        double start = static_cast<double>(startTimeInRecordingUnits) * static_cast<double>(dataCurrentRatio);
-        startInRecordingUnits = static_cast<dataType>(floor(0.5 + start)) + static_cast<long>(position);
-    }
-    else
-        startInRecordingUnits = static_cast<dataType>(startTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = clusters(2, newStartIndex);
-            if (time == startInRecordingUnits)
-                break;
-            else if (time > startInRecordingUnits)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = clusters(2, newStartIndex);
-
-        qDebug() << "newStartIndex " << newStartIndex << " time " << time << " nbSpikes " << nbSpikes << "\n";
-
-        if (time < startInRecordingUnits && (newStartIndex < nbSpikes))
-        {
-            while (time < startInRecordingUnits)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                }
-            }
-        }
-        else if (time > startInRecordingUnits && (newStartIndex > 1))
-        {
-            while (time > startInRecordingUnits)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                    if (time < startInRecordingUnits)
-                    {
-                        newStartIndex++;
-                        time = clusters(2, newStartIndex);
-                        break;
-                    }
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (clusters(2, previousEndIndex) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbSpikes)
-                    startIndex = nbSpikes;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-    }
-
-
-    time = clusters(2, startIndex);
-
-    dataType previousTime = previousStartTime + static_cast<long>(timeFrame * clusterPosition);
-    double computeTime = static_cast<double>(static_cast<double>(time) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    dataType timeInMiliseconds = static_cast<dataType>(floor(0.5 + computeTime));
-    //check that the spike corresponding to the current startIndex
-    //is not the one already at clusterPosition, if so take the following start index.
-    if (((timeInMiliseconds == previousTime) || (time == startInRecordingUnits)) && (startIndex < nbSpikes))
-        startIndex++;
-
-    //look up for the first spike contained in selectedIds which exist after startTime
-    while (true)
-    {
-        int id = clusters(1, startIndex);
-        if (selectedIds.contains(id))
-            break;
-        startIndex++;
-        if (startIndex > nbSpikes)
-        {
-            startIndex = nbSpikes;
-            break;
-        }
-    }
-
-    //check that a valid index has been found (the startIndex corresponds to a spike included in selectedIds)
-    //if that is not the case return startTime as the startingTime => no change will be done in the view, and startTimeInRecordingUnits
-    int id = clusters(1, startIndex);
-    if (!selectedIds.contains(id))
-    {
-        Array<dataType> data;
-        emit nextClusterDataReady(data, initiator, name, initialStartTime, startTimeInRecordingUnits);
-        return;
-    }
-
-    time = clusters(2, startIndex);
-
-    //the found spike will be placed at clusterPosition*100 % of the timeFrame
-    dataType timeFrameInRecordingUnits = static_cast<dataType>(timeFrame * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    //compute the final starting time
-    float position = static_cast<float>(timeFrameInRecordingUnits) * clusterPosition;
-    dataType startingInRecordingUnits = qMax(time - static_cast<long>(position), 0L);
-
-    //compute the final index corresponding to the final starting time
-    long newStartIndex = startIndex;
-    while (time > startingInRecordingUnits)
-    {
-        newStartIndex--;
-        if (newStartIndex <= 0)
-        {
-            newStartIndex = 1;
-            time = clusters(2, newStartIndex);
-            break;
-        }
-        else
-        {
-            time = clusters(2, newStartIndex);
-            if (time < startingInRecordingUnits)
-            {
-                newStartIndex++;
-                time = clusters(2, newStartIndex);
-                break;
-            }
-        }
-    }
-
-    startIndex = newStartIndex;
-
-    dataType endInRecordingUnits = startingInRecordingUnits + timeFrameInRecordingUnits;
-
-    //Always keep the same timeFrame
-    if (endInRecordingUnits > dataFileMaxTime)
-    {
-        startingInRecordingUnits = dataFileMaxTime - timeFrameInRecordingUnits;
-        endInRecordingUnits = dataFileMaxTime;
-    }
-
-    //Store the information for the next request
-    double computeStartingTime = static_cast<double>(static_cast<double>(startingInRecordingUnits) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    previousStartTime = static_cast<dataType>(floor(0.5 + computeStartingTime));
-    previousStartIndex = startIndex;
-
-    //look up for the spike ids and indexes.
-    //The exact size (<=> number of spikes is not known yet, so the size of data is set to the maximum possible)
-
-    data.setSize(2, (endIndex - startIndex + 1)); //line 1 sample index,line 2 clusterId
-    time = clusters(2, startIndex);
-
-    long count = 0;
-    if (dataCurrentRatio != 1)
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            double currentTime = static_cast<double>(time - startingInRecordingUnits) / static_cast<double>(dataCurrentRatio);
-            data(1, count + 1) = static_cast<dataType>(floor(0.5 + currentTime));
-            data(2, count + 1) = clusters(1, startIndex);
-
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-    else
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            data(1, count + 1) = (time - startingInRecordingUnits);
-            data(2, count + 1) = clusters(1, startIndex);
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-
-
-    qDebug() << " count " << count << "\n";
-
-
-    //Store the data in a array of the good size
-    Array<dataType> finalData;
-    finalData.setSize(2, count);
-    finalData.copySubset(data, count);
-
-    //Store the information for the next request
-    double computeEndTime = static_cast<double>(static_cast<double>(endInRecordingUnits) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    previousEndTime = static_cast<dataType>(computeEndTime) + 1;
-    previousEndIndex = startIndex - 1;
-
-    //the data provider needs the startingInRecordingUnits computed with the current sampling rate and not the one use to record
-    //the data (if the currently open file is a .dat file the sampling rates are equals)
-    double startingInCurrentRecordingUnits = static_cast<double>(startingInRecordingUnits) / static_cast<double>(dataCurrentRatio);
-    dataType startingInCurrentRecordingUnits2 = static_cast<dataType>(floor(0.5 + startingInCurrentRecordingUnits));
-
-    //Send the information to the receiver.
-    emit nextClusterDataReady(finalData, initiator, name, previousStartTime, startingInCurrentRecordingUnits2);
+    long startingTime;
+    long startingTimeInRecordingUnits;
+    browse(startTime, timeFrame, selectedIds, startTimeInRecordingUnits, true, data, startingTime, startingTimeInRecordingUnits);
+    emit nextClusterDataReady(data, initiator, name, startingTime, startingTimeInRecordingUnits);
 }
 
 
 void ClustersProvider::requestPreviousClusterData(long startTime, long timeFrame, QList<int> selectedIds, QObject* initiator, long startTimeInRecordingUnits)
 {
-
-    long initialStartTime = startTime;
-    //Compute the start time for the spike look up
-    startTime = initialStartTime + static_cast<long>(timeFrame * clusterPosition);
-
-    //first look up for the index corresponding to the startTime and then for the first valid spike (contained in selectedIds)
-    //before that time.
     Array<dataType> data;
-
-    long startIndex = previousStartIndex;
-    //By default we will go up to the end of the file
-    long endIndex = nbSpikes;
-    long dicotomyBreak = 1000;
-    long time;
-
-    //Convert the time in miliseconds to time in recording units (to compare it with the data from the file) if need it.
-    dataType startInRecordingUnits;
-    //startTimeInRecordingUnits has been computed in a previous call to a browsing function. It has to be used insted of computing
-    //the value from startTime because of the rounding which has been applied to it.
-    if (startTimeInRecordingUnits != 0)
-    {
-        //the found spike will be placed at clusterPosition*100 % of the timeFrame
-        dataType timeFrameInRecordingUnits = static_cast<dataType>(timeFrame * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-        float position = static_cast<float>(timeFrameInRecordingUnits) * clusterPosition;
-
-        //startTimeInRecordingUnits is given in recording units computed with the current sampling rate, it has to be converted in
-        //the recording units corresponding to the acquisiton system sampling rate (unit used in the cluster file).
-        double start = static_cast<double>(startTimeInRecordingUnits) * static_cast<double>(dataCurrentRatio);
-        startInRecordingUnits = static_cast<dataType>(floor(0.5 + start)) + static_cast<long>(position);
-    }
-    else
-        startInRecordingUnits = static_cast<dataType>(startTime * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = clusters(2, newStartIndex);
-            if (time == startInRecordingUnits)
-                break;
-            else if (time > startInRecordingUnits)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = clusters(2, newStartIndex);
-
-        if (time < startInRecordingUnits && (newStartIndex < nbSpikes))
-        {
-            while (time < startInRecordingUnits)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbSpikes)
-                {
-                    newStartIndex = nbSpikes;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                    if (time > startInRecordingUnits)
-                    {
-                        newStartIndex--;
-                        time = clusters(2, newStartIndex);
-                        break;
-                    }
-                }
-            }
-        }
-        else if (time > startInRecordingUnits && (newStartIndex > 1))
-        {
-            while (time > startInRecordingUnits)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = clusters(2, newStartIndex);
-                    break;
-                }
-                else
-                {
-                    time = clusters(2, newStartIndex);
-                    if (time < startInRecordingUnits)
-                        break;
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (clusters(2, previousEndIndex) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbSpikes)
-                    startIndex = nbSpikes;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-    }
-
-
-    //check that the spike corresponding to the startIndex
-    //is not the one already at clusterPosition, if so take the previous index
-    time = clusters(2, startIndex);
-
-    dataType previousTime = previousStartTime + static_cast<long>(timeFrame * clusterPosition);
-    double computeTime = static_cast<double>(static_cast<double>(time) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    dataType timeInMiliseconds = static_cast<dataType>(floor(0.5 + computeTime));
-    if ((time == startInRecordingUnits || timeInMiliseconds == previousTime) && (startIndex > 1))
-        startIndex--;
-
-    //now, look up for the first spike contained in selectedIds which exist before endTime
-    while (true)
-    {
-        int id = clusters(1, startIndex);
-        if (selectedIds.contains(id))
-            break;
-        startIndex--;
-        if (startIndex <= 0)
-        {
-            startIndex = 1;
-            break;
-        }
-    }
-
-    //check that a valid index has been found: the startIndex corresponds to n spike included in selectedIds
-    //and the corresponding time in before the startTime
-    //if that is not the case return initialStartTime as the startingTime => no change will be done in the view, and startTimeInRecordingUnits
-    int id = clusters(1, startIndex);
-    time = clusters(2, startIndex);
-    if (!selectedIds.contains(id) || time > startInRecordingUnits)
-    {
-        Array<dataType> data;
-        emit previousClusterDataReady(data, initiator, name, initialStartTime, startTimeInRecordingUnits);
-        return;
-    }
-
-    //the found spike will be placed at clusterPosition*100 % of the timeFrame
-    dataType timeFrameInRecordingUnits = static_cast<dataType>(timeFrame * static_cast<double>(static_cast<double>(samplingRate) / static_cast<double>(1000)));
-    //compute the final starting time and the corresponding index
-    float position = static_cast<float>(timeFrameInRecordingUnits) * clusterPosition;
-    dataType startingInRecordingUnits = qMax(time - static_cast<long>(position), 0L);
-
-    //compute the final index corresponding to the final starting time
-    long newStartIndex = startIndex;
-    while (time > startingInRecordingUnits)
-    {
-        newStartIndex--;
-        if (newStartIndex <= 0)
-        {
-            newStartIndex = 1;
-            time = clusters(2, newStartIndex);
-            break;
-        }
-        else
-        {
-            time = clusters(2, newStartIndex);
-            if (time < startingInRecordingUnits)
-            {
-                newStartIndex++;
-                time = clusters(2, newStartIndex);
-                break;
-            }
-        }
-    }
-
-    startIndex = newStartIndex;
-
-    //Store the information for the next request
-    double computeStartingTime = static_cast<double>(static_cast<double>(startingInRecordingUnits) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    previousStartTime = static_cast<dataType>(floor(0.5 + computeStartingTime));
-    previousStartIndex = startIndex;
-
-    //look up for the cluster ids and indexes.
-    //The exact size (<=> number of spikes is not known yet, so the size of data is set to the maximum possible)
-    data.setSize(2, (endIndex - startIndex + 1)); //line 1 sample index,line 2 clusterId
-    time = clusters(2, startIndex);
-    dataType endInRecordingUnits = startingInRecordingUnits + timeFrameInRecordingUnits;
-
-    long count = 0;
-    if (dataCurrentRatio != 1)
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            double currentTime = static_cast<double>(time - startingInRecordingUnits) / static_cast<double>(dataCurrentRatio);
-            data(1, count + 1) = static_cast<dataType>(floor(0.5 + currentTime));
-            data(2, count + 1) = clusters(1, startIndex);
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-    else
-    {
-        while (time <= endInRecordingUnits && startIndex <= nbSpikes)
-        {
-            data(1, count + 1) = (time - startingInRecordingUnits);
-            data(2, count + 1) = clusters(1, startIndex);
-
-            count++;
-            startIndex++;
-            if (startIndex > nbSpikes)
-                break;
-            time = clusters(2, startIndex);
-        }
-    }
-
-    //Store the data in a array of the good size
-    Array<dataType> finalData;
-    finalData.setSize(2, count);
-    finalData.copySubset(data, count);
-
-    //Store the information for the next request
-    double computeEndTime = static_cast<double>(static_cast<double>(endInRecordingUnits) * static_cast<double>(1000) / static_cast<double>(samplingRate));
-    previousEndTime = static_cast<dataType>(computeEndTime) + 1;
-    previousEndIndex = startIndex - 1;
-
-    //the data provider needs the startingInRecordingUnits computed with the current sampling rate and not the one use to record
-    //the data (if the currently open file is a .dat file the sampling rates are equals)
-    double startingInCurrentRecordingUnits = static_cast<double>(startingInRecordingUnits) / static_cast<double>(dataCurrentRatio);
-    dataType startingInCurrentRecordingUnits2 = static_cast<dataType>(floor(0.5 + startingInCurrentRecordingUnits));
-
-
-    //Send the information to the receiver.
-    emit previousClusterDataReady(finalData, initiator, name, previousStartTime, startingInCurrentRecordingUnits2);
+    long startingTime;
+    long startingTimeInRecordingUnits;
+    browse(startTime, timeFrame, selectedIds, startTimeInRecordingUnits, false, data, startingTime, startingTimeInRecordingUnits);
+    emit previousClusterDataReady(data, initiator, name, startingTime, startingTimeInRecordingUnits);
 }
