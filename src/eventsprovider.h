@@ -317,9 +317,9 @@ class EventsProvider : public DataProvider
   */
     long firstEventAfter(double time);
 
-    /**Finds the event index corresponding to the given time and event id.
+    /**Finds the index of the event with id @p eventId closest to @p eventTime.
   * @param eventTime time to look up.
-  * @param eventId id of the event to look up.
+  * @param eventId id of the event to look up, -1 for any.
   */
     long findIndex(double eventTime, int eventId = -1);
 

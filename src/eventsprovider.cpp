@@ -325,25 +325,19 @@ void EventsProvider::modifiedEvent(int selectedEventId, double time, double newT
 
 long EventsProvider::findIndex(double eventTime, int eventId)
 {
-    long startIndex = qMin(firstEventAtOrAfter(eventTime), nbEvents);
-
-    if (eventId != -1)
+    //The view gives back the time of the sample an event is drawn on, which is up to half a sample away from the event.
+    long above = firstEventAtOrAfter(eventTime);
+    long below = above - 1;
+    while (below >= 1 || above <= nbEvents)
     {
-        int id = eventIds[events(1, startIndex)];
-        if (id != eventId)
+        const bool takeBelow = above > nbEvents || (below >= 1 && eventTime - timeStamps(1, below) <= timeStamps(1, above) - eventTime);
+        const long index = takeBelow ? below-- : above++;
+        if (eventId == -1 || eventIds[events(1, index)] == eventId)
         {
-            double diff1 = fabs(timeStamps(1, startIndex) - timeStamps(1, startIndex - 1));
-            double diff2 = fabs(timeStamps(1, startIndex + 1) - timeStamps(1, startIndex));
-            if (diff1 < diff2 && eventIds[events(1, startIndex - 1)] == eventId)
-                startIndex--;
-            else if (diff1 < diff2 && eventIds[events(1, startIndex - 1)] != eventId && eventIds[events(1, startIndex + 1)] == eventId)
-                startIndex++;
-            else if (diff2 < diff1 && eventIds[events(1, startIndex + 1)] == eventId)
-                startIndex++;
+            return index;
         }
     }
-
-    return startIndex;
+    return qMin(firstEventAtOrAfter(eventTime), nbEvents);
 }
 
 

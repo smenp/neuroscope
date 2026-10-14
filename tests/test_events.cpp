@@ -19,12 +19,16 @@
 #include "itempalette.h"
 #include "neuroscopeview.h"
 #include "traceview.h"
+#include "tracewidget.h"
 
 #include <QAction>
+#include <QFile>
 #include <QMouseEvent>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QtTest>
+
+#include <algorithm>
 
 using namespace testutils;
 
@@ -60,6 +64,19 @@ void selectAnEvent(NeuroscopeApp* app)
     app->activeView()->shownEventsUpdate("abc", { 1 });
     QMetaObject::invokeMethod(app, "slotSelectEvent");
     clickInTheTraces(app);
+}
+
+/** The times of the events in the event file at @p path, in time order. */
+QList<double> eventTimes(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        qFatal("Cannot read %s", qPrintable(path));
+    QList<double> times;
+    for (const QString& line: QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts))
+        times << line.section('\t', 0, 0).toDouble();
+    std::sort(times.begin(), times.end());
+    return times;
 }
 
 } // namespace
@@ -197,6 +214,48 @@ class TestEvents : public QObject
         redo->trigger();
         QVERIFY(!undo->isEnabled());
         QVERIFY(!redo->isEnabled());
+    }
+
+    void removeTheSelectedEvent_data()
+    {
+        QTest::addColumn<double>("samplingRate");
+        QTest::addColumn<QList<double>>("times");
+        QTest::addColumn<double>("selected");
+        QTest::addColumn<long>("windowStart");
+        QTest::addColumn<long>("windowDuration");
+        // A sample is 0.8 ms: the event, 49.45 ms into the window, is drawn on the sample at 49.6 ms, whose time,
+        // 1000.6 ms, is after the event.
+        QTest::newRow("time of its sample rounding up") << 1250.0 << QList<double>{ 700, 1000.45, 1300, 1600 } << 1000.45 << 951L << 100L;
+    }
+
+    // Remove Event removes the event selected in the window shown, and no other.
+    void removeTheSelectedEvent()
+    {
+        QFETCH(double, samplingRate);
+        QFETCH(QList<double>, times);
+        QFETCH(double, selected);
+        QFETCH(long, windowStart);
+        QFETCH(long, windowDuration);
+        const QString baseName = QString("remove-%1").arg(QTest::currentDataTag()).replace(' ', '-');
+        auto app = openRecording(writeRecording(QDir(dir.path()), baseName, NB_CHANNELS, samplingRate, 3 * static_cast<std::int64_t>(samplingRate)));
+        const QString eventPath = dir.filePath(baseName + ".abc.evt");
+        QString content;
+        for (double time: times)
+            content += QString::number(time, 'g', 12) + "\t" + DESCRIPTION + "\n";
+        writeTextFile(eventPath, content);
+        loadFile(app.get(), "slotLoadEventFiles", eventPath);
+        app->activeView()->shownEventsUpdate("abc", { 1 });
+        QMetaObject::invokeMethod(app->findChild<TraceWidget*>(), "slotSetStartAndDuration", Q_ARG(long, windowStart), Q_ARG(long, windowDuration));
+        QMetaObject::invokeMethod(app.get(), "slotSelectEvent");
+        clickInTheTraces(app.get());
+
+        QMetaObject::invokeMethod(app.get(), "removeEvent");
+
+        QVERIFY(app->getDocument()->saveEventFiles());
+        QList<double> left = times;
+        left.removeOne(selected);
+        std::sort(left.begin(), left.end());
+        QCOMPARE(eventTimes(eventPath), left);
     }
 };
 
