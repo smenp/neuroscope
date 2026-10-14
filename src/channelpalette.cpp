@@ -1682,6 +1682,21 @@ void ChannelPalette::trashChannelsMovedAround(const QList<int>& channelIds, cons
     update();
 }
 
+/** Selects the items of @p channelIds in @p view in one selection change. */
+static void selectChannelItems(ChannelIconView* view, const QList<int>& channelIds)
+{
+    QItemSelection selection;
+    for (int channelId: channelIds)
+    {
+        for (QListWidgetItem* item: view->findItems(channelId))
+        {
+            const QModelIndex index = view->model()->index(view->row(item), 0);
+            selection.select(index, index);
+        }
+    }
+    view->selectionModel()->select(selection, QItemSelectionModel::Select);
+}
+
 void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after)
 {
     const SelectionBlocker batch(this, true);
@@ -2337,6 +2352,10 @@ void ChannelPalette::dragChannels(const QList<int>& channelIds, const QString& s
         }
     }
 
+
+    //The dragged channels stay selected, except in the trash, as when they are discarded
+    if (targetGroup != "0" && targetGroup != "-1")
+        selectChannelItems(targetIconView, channelIds);
 
     //Modify the entry in the map group-channel list
     groupsChannels->remove(targetGroup.toInt());

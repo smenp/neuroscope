@@ -328,7 +328,8 @@ class TestChannelPalette : public QObject
         QTest::newRow("in the spike palette") << true << QList<int>{ 4 } << 1;
     }
 
-    // Dragged channels move to the group of the channel they are dropped on; the other palette is unchanged.
+    // Dragged channels move to the group of the channel they are dropped on, where they stay selected if it is another
+    // group; the other palette is unchanged.
     void dragChannels()
     {
         QFETCH(bool, spikePalette);
@@ -338,6 +339,7 @@ class TestChannelPalette : public QObject
         const QMap<int, int>& groupOf = spikePalette ? palettes->spikeChannels : palettes->displayChannels;
         const QMap<int, QList<int>>& otherGroups = spikePalette ? palettes->displayGroups : palettes->spikeGroups;
         const QMap<int, QList<int>> otherGroupsBefore = otherGroups;
+        const int source = groupOf.value(channels.first());
         const int target = groupOf.value(onto);
         const QList<int> targetBefore = shown(palette, target);
         select(palette, channels);
@@ -349,6 +351,12 @@ class TestChannelPalette : public QObject
             QCOMPARE(groupOf.value(channel), target);
         QVERIFY(shown(palette, target) != targetBefore);
         QCOMPARE(otherGroups, otherGroupsBefore);
+        if (source != target)
+        {
+            QList<int> selected = palette->selectedChannels();
+            std::sort(selected.begin(), selected.end());
+            QCOMPARE(selected, channels);
+        }
     }
 
     void trashStaysInStep_data()
