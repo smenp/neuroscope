@@ -23,6 +23,8 @@
 #include <QList>
 #include <QDebug>
 
+#include <algorithm>
+
 //include files for the application
 #include "eventsprovider.h"
 #include "timer.h"
@@ -129,13 +131,6 @@ int EventsProvider::loadData()
 
     updateMappingAndDescriptionLength();
 
-    //Initialize the variables
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = nbEvents;
-    previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-    fileMaxTime = previousEndTime;
-
     return OK;
 }
 
@@ -181,13 +176,6 @@ void EventsProvider::initializeEmptyProvider()
     timeStamps.setSize(0, 0);
     ///Default description length is 2 characters
     descriptionLength = 2;
-
-    //Initialize the variables
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = 1;
-    previousEndTime = 0;
-    fileMaxTime = 0;
 }
 
 void EventsProvider::requestData(long startTime, long endTime, QObject* initiator, long startTimeInRecordingUnits)
@@ -199,707 +187,105 @@ void EventsProvider::retrieveData(long startTime, long endTime, QObject* initiat
 {
     Array<dataType> times;
     Array<int> ids;
-
-    if (nbEvents == 0 || startTime > fileMaxTime)
-    {
-        //Send the information to the receiver.
-        emit dataReady(times, ids, initiator, name);
-        return;
-    }
-    if (endTime > fileMaxTime)
-        endTime = fileMaxTime;
-
-    long startIndex = previousStartIndex;
-    long endIndex = previousEndIndex;
-    long dicotomyBreak = 1000;
-    long time;
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-            if (endTime <= previousStartTime)
-                endIndex = previousStartIndex;
-            else if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbEvents;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-            if (endTime <= previousStartTime)
-                endIndex = previousStartIndex;
-            else if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbEvents;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-            if (endTime <= previousEndTime)
-                endIndex = previousEndIndex;
-            else if (endTime > previousEndTime)
-                endIndex = nbEvents;
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-            endIndex = nbEvents;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time == startTime)
-                break;
-            else if (time > startTime)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-
-        if (time < startTime && (newStartIndex < nbEvents))
-        {
-            while (time < startTime)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                }
-            }
-        }
-        else if (time > startTime && (newStartIndex > 1))
-        {
-            while (time > startTime)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    if (time < startTime)
-                    {
-                        newStartIndex++;
-                        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                        break;
-                    }
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (static_cast<long>(floor(0.5 + timeStamps(1, previousEndIndex))) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbEvents)
-                    startIndex = nbEvents;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-
-        if (endTime <= previousEndTime)
-            endIndex = previousEndIndex;
-        else if (endTime > previousEndTime)
-            endIndex = nbEvents;
-    }
-
-
-    //Store the information for the next request
-    previousStartTime = startTime;
-    previousStartIndex = startIndex;
-
-    //look up for the event ids and indexes.
-    //The exact size (<=> number of events is not known yet, so the size of data is set to the maximum possible)
-    times.setSize(1, (endIndex - startIndex + 1));
-    ids.setSize(1, (endIndex - startIndex + 1));
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-
-    long count = 0;
-    while (time <= endTime && startIndex <= nbEvents)
-    {
-        times(1, count + 1) = qMax(static_cast<dataType>(floor(static_cast<float>(0.5 + (timeStamps(1, startIndex) - static_cast<double>(startTime)) * currentSamplingRate))), 0L);
-        ids(1, count + 1) = eventIds[events(1, startIndex)];
-
-        count++;
-        startIndex++;
-        if (startIndex > nbEvents)
-            break;
-        time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    }
-
-
-    //Store the data in a array of the good size
-    Array<dataType> finalTimes;
-    Array<int> finalIds;
-    finalTimes.setSize(1, count);
-    finalIds.setSize(1, count);
-    finalTimes.copySubset(times, count);
-    finalIds.copySubset(ids, count);
-
-    //Store the information for the next request
-    previousEndTime = endTime;
-    previousEndIndex = startIndex - 1;
+    eventsInWindow(startTime, endTime, times, ids);
 
     //Send the information to the receiver.
-    emit dataReady(finalTimes, finalIds, initiator, name);
+    emit dataReady(times, ids, initiator, name);
+}
+
+void EventsProvider::eventsInWindow(long startTime, long endTime, Array<dataType>& times, Array<int>& ids)
+{
+    //The traces of a window are its samples from startTime to endTime, both included, numbered from 0.
+    //An event is drawn on the sample nearest to it, and belongs to the window if that sample does.
+    const dataType lastSample = static_cast<dataType>(endTime * currentSamplingRate) - static_cast<dataType>(startTime * currentSamplingRate);
+    const long first = firstEventAtOrAfter(startTime - 1.0 / currentSamplingRate);
+    const long last = firstEventAfter(endTime + 1.0 / currentSamplingRate) - 1;
+
+    Array<dataType> windowTimes;
+    Array<int> windowIds;
+    windowTimes.setSize(1, qMax(last - first + 1, 0L));
+    windowIds.setSize(1, qMax(last - first + 1, 0L));
+    long count = 0;
+    for (long i = first; i <= last; ++i)
+    {
+        const dataType sample = static_cast<dataType>(floor(0.5 + (timeStamps(1, i) - static_cast<double>(startTime)) * currentSamplingRate));
+        if (sample >= 0 && sample <= lastSample)
+        {
+            ++count;
+            windowTimes(1, count) = sample;
+            windowIds(1, count) = eventIds[events(1, i)];
+        }
+    }
+
+    times.setSize(1, count);
+    ids.setSize(1, count);
+    times.copySubset(windowTimes, count);
+    ids.copySubset(windowIds, count);
+}
+
+long EventsProvider::firstEventAtOrAfter(double time)
+{
+    double* const begin = nbEvents == 0 ? nullptr : &timeStamps(1, 1);
+    return 1 + (std::lower_bound(begin, begin + nbEvents, time) - begin);
+}
+
+long EventsProvider::firstEventAfter(double time)
+{
+    double* const begin = nbEvents == 0 ? nullptr : &timeStamps(1, 1);
+    return 1 + (std::upper_bound(begin, begin + nbEvents, time) - begin);
 }
 
 void EventsProvider::requestNextEventData(long startTime, long timeFrame, const QList<int>& selectedIds, QObject* initiator)
 {
-    long initialStartTime = startTime;
-    //Compute the start time for the event look up
-    startTime = initialStartTime + static_cast<long>(timeFrame * eventPosition);
+    //A window starts on a whole millisecond, and shows the event browsed to timeFrame * eventPosition after its start, so the
+    //events which round to the same millisecond share a window. Browsing goes to the nearest event which rounds to another
+    //millisecond than the one at that position, so that the window always moves.
+    const long offset = static_cast<long>(timeFrame * eventPosition);
+    long index = firstEventAtOrAfter(startTime + offset + 0.5);
+    while (index <= nbEvents && !selectedIds.contains(eventIds[events(1, index)]))
+    {
+        ++index;
+    }
 
-    //first look up for the index corresponding to the startTime and then for the first valid event (contained in selectedIds)
-    //after that time
     Array<dataType> times;
     Array<int> ids;
-
-    if (startTime > fileMaxTime)
+    //Without a next event, the start is returned unchanged.
+    long startingTime = startTime;
+    if (index <= nbEvents)
     {
-        //Send the information to the receiver.
-        emit dataReady(times, ids, initiator, name);
-        return;
+        startingTime = qMax(static_cast<long>(floor(0.5 + timeStamps(1, index))) - offset, 0L);
+        eventsInWindow(startingTime, startingTime + timeFrame, times, ids);
     }
-
-    long startIndex = previousStartIndex;
-    //By default we will go up to the end of the file
-    long endTime = fileMaxTime;
-    long endIndex = nbEvents;
-    long dicotomyBreak = 1000;
-    long time;
-
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time == startTime)
-                break;
-            else if (time > startTime)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-
-        if (time < startTime && (newStartIndex < nbEvents))
-        {
-            while (time < startTime)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                }
-            }
-        }
-        else if (time > startTime && (newStartIndex > 1))
-        {
-            while (time > startTime)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    if (time < startTime)
-                    {
-                        newStartIndex++;
-                        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                        break;
-                    }
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (static_cast<long>(floor(0.5 + timeStamps(1, previousEndIndex))) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbEvents)
-                    startIndex = nbEvents;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-    }
-
-    //the found event will be placed at eventPosition*100 % of the timeFrame
-    //check that the event corresponding to the current startIndex
-    //is not the one already at eventPosition, if so take the following start index
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    dataType startingTime = qMax(time - static_cast<long>(timeFrame * eventPosition), 0L);
-    while ((time == startTime) && (startIndex < nbEvents))
-    {
-        startIndex++;
-        time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    }
-
-    //look up for the first event contained in selectedIds which exist after startTime
-    while (true)
-    {
-        int id = eventIds[events(1, startIndex)];
-
-        if (selectedIds.contains(id))
-            break;
-        startIndex++;
-        if (startIndex > nbEvents)
-        {
-            startIndex = nbEvents;
-            break;
-        }
-    }
-
-    //check that a valid index has been found (the startIndex corresponds to an event included in selectedIds)
-    //if that is not the case return startTime as the startingTime => no change will be done in the view)
-
-    int id = eventIds[events(1, startIndex)];
-    if (!selectedIds.contains(id))
-    {
-        Array<dataType> finalTimes;
-        Array<int> finalIds;
-        emit nextEventDataReady(finalTimes, finalIds, initiator, name, initialStartTime);
-        return;
-    }
-
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-
-    //compute the final starting time and the corresponding index
-    startingTime = qMax(time - static_cast<long>(timeFrame * eventPosition), 0L);
-
-    long newStartIndex = startIndex;
-    while (time > startingTime)
-    {
-        newStartIndex--;
-        if (newStartIndex <= 0)
-        {
-            newStartIndex = 1;
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            break;
-        }
-        else
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time < startingTime)
-            {
-                newStartIndex++;
-                time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                break;
-            }
-        }
-    }
-
-    startIndex = newStartIndex;
-
-    //Store the information for the next request
-    previousStartTime = startingTime;
-    previousStartIndex = startIndex;
-
-
-    //look up for the event ids and indexes.
-    //The exact size (<=> number of events is not known yet, so the size of data is set to the maximum possible)
-    times.setSize(1, (endIndex - startIndex + 1));
-    ids.setSize(1, (endIndex - startIndex + 1));
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    endTime = startingTime + timeFrame;
-
-    long count = 0;
-    while (time <= endTime && startIndex <= nbEvents)
-    {
-        times(1, count + 1) = qMax(static_cast<dataType>(floor(static_cast<float>(0.5 + (timeStamps(1, startIndex) - static_cast<float>(startingTime)) * currentSamplingRate))), 0L);
-        ids(1, count + 1) = eventIds[events(1, startIndex)];
-
-        count++;
-        startIndex++;
-        if (startIndex > nbEvents)
-            break;
-        time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    }
-
-    //Store the data in a array of the good size
-    Array<dataType> finalTimes;
-    Array<int> finalIds;
-    finalTimes.setSize(1, count);
-    finalIds.setSize(1, count);
-    finalTimes.copySubset(times, count);
-    finalIds.copySubset(ids, count);
-
-    //Store the information for the next request
-    previousEndTime = endTime;
-    previousEndIndex = startIndex - 1;
-
-    //Send the information to the receiver.
-    emit nextEventDataReady(finalTimes, finalIds, initiator, name, startingTime);
+    emit nextEventDataReady(times, ids, initiator, name, startingTime);
 }
 
 void EventsProvider::requestPreviousEventData(long startTime, long timeFrame, QList<int> selectedIds, QObject* initiator)
 {
-    long initialStartTime = startTime;
-    //Compute the start time for the event look up
-    startTime = initialStartTime + static_cast<long>(timeFrame * eventPosition);
+    //See requestNextEventData.
+    const long offset = static_cast<long>(timeFrame * eventPosition);
+    long index = firstEventAtOrAfter(startTime + offset - 0.5) - 1;
+    while (index >= 1 && !selectedIds.contains(eventIds[events(1, index)]))
+    {
+        --index;
+    }
 
-    //first look up for the index corresponding to the startTime and then for the first valid event (contained in selectedIds)
-    //before that time.
-
-    //first look up for the index corresponding to the startTime
     Array<dataType> times;
     Array<int> ids;
-
-    long startIndex = previousStartIndex;
-    //By default we will go up to the end of the file
-    long endTime = fileMaxTime;
-    long endIndex = nbEvents;
-    long dicotomyBreak = 1000;
-    long time;
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
+    //Without a previous event, the start is returned unchanged.
+    long startingTime = startTime;
+    if (index >= 1)
     {
-        if (startTime == 0)
-        {
-            startIndex = 1;
-        }
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-        }
-        else if (startTime > previousEndTime)
-        {
-            startIndex = previousEndIndex;
-        }
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time == startTime)
-                break;
-            else if (time > startTime)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-
-        if (time < startTime && (newStartIndex < nbEvents))
-        {
-            while (time < startTime)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    if (time > startTime)
-                    {
-                        newStartIndex--;
-                        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                        break;
-                    }
-                }
-            }
-        }
-        else if (time > startTime && (newStartIndex > 1))
-        {
-            while (time > startTime)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    if (time < startTime)
-                        break;
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (static_cast<long>(floor(0.5 + timeStamps(1, previousEndIndex))) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbEvents)
-                    startIndex = nbEvents;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
+        startingTime = qMax(static_cast<long>(floor(0.5 + timeStamps(1, index))) - offset, 0L);
+        eventsInWindow(startingTime, startingTime + timeFrame, times, ids);
     }
-
-
-    //look up for the first event contained in selectedIds which exist before startTime
-
-    //the found event will be placed at eventPosition*100 % of the timeFrame
-    //check that the event corresponding to the startIndex
-    //is not the one already at eventPosition, if so take the previous index.
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    dataType startingTime = qMax(time - static_cast<long>(timeFrame * eventPosition), 0L);
-    while ((time == startTime) && (startIndex > 1))
-    {
-        startIndex--;
-        time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    }
-
-    //now, look up for the first event contained in selectedIds which exist before endTime
-    while (true)
-    {
-        int id = eventIds[events(1, startIndex)];
-        if (selectedIds.contains(id))
-            break;
-        startIndex--;
-        if (startIndex <= 0)
-        {
-            startIndex = 1;
-            break;
-        }
-    }
-
-    //check that a valid index has been found: the startIndex corresponds to an event included in selectedIds
-    ////and the corresponding time in before the startTime
-    //if that is not the case return startTime as the startingTime => no change will be done in the view)
-    int id = eventIds[events(1, startIndex)];
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    if (!selectedIds.contains(id) || time > startTime)
-    {
-        Array<dataType> finalTimes;
-        Array<int> finalIds;
-        emit previousEventDataReady(finalTimes, finalIds, initiator, name, initialStartTime);
-        return;
-    }
-
-    //compute the final starting time and the corresponding index
-    startingTime = qMax(time - static_cast<long>(timeFrame * eventPosition), 0L);
-    long newStartIndex = startIndex;
-
-    while (time > startingTime)
-    {
-        newStartIndex--;
-        if (newStartIndex <= 0)
-        {
-            newStartIndex = 1;
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            break;
-        }
-        else
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time < startingTime)
-            {
-                newStartIndex++;
-                time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                break;
-            }
-        }
-    }
-
-    startIndex = newStartIndex;
-    //Store the information for the next request
-    previousStartTime = startingTime;
-    previousStartIndex = startIndex;
-
-    //look up for the event ids and indexes.
-    //The exact size (<=> number of events is not known yet, so the size of data is set to the maximum possible)
-    times.setSize(1, (endIndex - startIndex + 1));
-    ids.setSize(1, (endIndex - startIndex + 1));
-    time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    endTime = startingTime + timeFrame;
-
-    long count = 0;
-    while (time <= endTime && startIndex <= nbEvents)
-    {
-        times(1, count + 1) = qMax(static_cast<dataType>(floor(static_cast<float>(0.5 + (timeStamps(1, startIndex) - static_cast<float>(startingTime)) * currentSamplingRate))), 0L);
-        ids(1, count + 1) = eventIds[events(1, startIndex)];
-        count++;
-        startIndex++;
-        if (startIndex > nbEvents)
-            break;
-        time = static_cast<long>(floor(0.5 + timeStamps(1, startIndex)));
-    }
-
-    //Store the data in a array of the good size
-    Array<dataType> finalTimes;
-    Array<int> finalIds;
-    finalTimes.setSize(1, count);
-    finalIds.setSize(1, count);
-    finalTimes.copySubset(times, count);
-    finalIds.copySubset(ids, count);
-
-    //Store the information for the next request
-    previousEndTime = endTime;
-    previousEndIndex = startIndex - 1;
-
-    //Send the information to the receiver.
-    emit previousEventDataReady(finalTimes, finalIds, initiator, name, startingTime);
+    emit previousEventDataReady(times, ids, initiator, name, startingTime);
 }
 
 void EventsProvider::modifiedEvent(int selectedEventId, double time, double newTime)
 {
     modified = true;
 
-    long timeIndex = findIndex(time, selectedEventId);
-    long newTimeIndex = findIndex(newTime, selectedEventId);
+    const long timeIndex = findIndex(time, selectedEventId);
     EventDescription selectedEvent = idsDescriptions[selectedEventId];
 
     //Clear the redo variables
@@ -912,197 +298,34 @@ void EventsProvider::modifiedEvent(int selectedEventId, double time, double newT
     timeStampsUndo = timeStamps;
     eventDescriptionCounterUndo = eventDescriptionCounter;
 
-    if (timeIndex == newTimeIndex)
+    //The event goes after the events at its new time, as an added event does.
+    if (newTime > timeStamps(1, timeIndex))
     {
-        events(1, timeIndex) = selectedEvent;
-        timeStamps(1, timeIndex) = newTime;
-        //Update fileMaxTime
-        fileMaxTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-    }
-    //Moved forward
-    else if (newTime > time)
-    {
-        for (int i = timeIndex; i < (newTimeIndex - 1); ++i)
+        const long newTimeIndex = firstEventAfter(newTime) - 1;
+        for (long i = timeIndex; i < newTimeIndex; ++i)
         {
             events(1, i) = events(1, i + 1);
             timeStamps(1, i) = timeStamps(1, i + 1);
         }
-
-        if (newTime > timeStamps(1, newTimeIndex))
-        {
-            events(1, newTimeIndex - 1) = events(1, newTimeIndex);
-            timeStamps(1, newTimeIndex - 1) = timeStamps(1, newTimeIndex);
-            events(1, newTimeIndex) = selectedEvent;
-            timeStamps(1, newTimeIndex) = newTime;
-        }
-        else
-        {
-            events(1, newTimeIndex - 1) = selectedEvent;
-            timeStamps(1, newTimeIndex - 1) = newTime;
-        }
-
-        //Update fileMaxTime
-        fileMaxTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
+        events(1, newTimeIndex) = selectedEvent;
+        timeStamps(1, newTimeIndex) = newTime;
     }
-
-    //Moved backward
-    else if (newTime < time)
+    else if (newTime < timeStamps(1, timeIndex))
     {
-        for (int i = timeIndex; i > (newTimeIndex + 1); --i)
+        const long newTimeIndex = firstEventAfter(newTime);
+        for (long i = timeIndex; i > newTimeIndex; --i)
         {
             events(1, i) = events(1, i - 1);
             timeStamps(1, i) = timeStamps(1, i - 1);
         }
-
-        if (newTime < timeStamps(1, newTimeIndex))
-        {
-            events(1, newTimeIndex + 1) = events(1, newTimeIndex);
-            timeStamps(1, newTimeIndex + 1) = timeStamps(1, newTimeIndex);
-            events(1, newTimeIndex) = selectedEvent;
-            timeStamps(1, newTimeIndex) = newTime;
-        }
-        else
-        {
-            events(1, newTimeIndex + 1) = selectedEvent;
-            timeStamps(1, newTimeIndex + 1) = newTime;
-        }
-
-        //Update fileMaxTime
-        fileMaxTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
+        events(1, newTimeIndex) = selectedEvent;
+        timeStamps(1, newTimeIndex) = newTime;
     }
-
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = nbEvents;
-    previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
 }
 
 long EventsProvider::findIndex(double eventTime, int eventId)
 {
-    if (eventTime > fileMaxTime)
-        return nbEvents;
-
-    long startTime = static_cast<long>(floor(0.5 + eventTime));
-
-    //By default we will go up to the end of the file
-    long endIndex = nbEvents;
-    long startIndex = previousStartIndex;
-    long dicotomyBreak = 1000;
-    long time;
-
-    //Look up for the closest starting index to the one corresponding to startTime
-    //Dicotomy will be used with a stop at dicotomyBreak.
-    if ((startTime != previousStartTime) && (startTime != previousEndTime))
-    {
-        if (startTime == 0)
-            startIndex = 1;
-        if (startTime < previousStartTime)
-        {
-            startIndex = static_cast<int>(previousStartIndex / 2);
-            if (startIndex <= 0)
-                startIndex = 1;
-        }
-        else if (startTime < previousEndTime && startTime > previousStartTime)
-        {
-            startIndex = previousStartIndex + static_cast<int>((previousEndIndex - previousStartIndex + 1) / 2);
-        }
-        else if (startTime > previousEndTime)
-            startIndex = previousEndIndex;
-
-        long newStartIndex = startIndex;
-        long newEndIndex = endIndex;
-        //dicotomy
-        while ((newEndIndex - newStartIndex + 1) > dicotomyBreak)
-        {
-            time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-            if (time == startTime)
-                break;
-            else if (time > startTime)
-            {
-                long previousStart = newStartIndex;
-                newStartIndex = previousStart - ((newEndIndex - previousStart + 1) / 2);
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    break;
-                }
-                newEndIndex = previousStart;
-            }
-            else
-            {
-                newStartIndex = newStartIndex + ((newEndIndex - newStartIndex + 1) / 2);
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    break;
-                }
-            }
-        }
-
-
-        //look up for the startIndex index by index
-        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-
-        if (time < startTime && (newStartIndex < (nbEvents)))
-        {
-            while (time < startTime)
-            {
-                newStartIndex++;
-                if (newStartIndex > nbEvents)
-                {
-                    newStartIndex = nbEvents;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                }
-            }
-        }
-        else if (time > startTime && (newStartIndex > 1))
-        {
-            while (time > startTime)
-            {
-                newStartIndex--;
-                if (newStartIndex <= 0)
-                {
-                    newStartIndex = 1;
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    break;
-                }
-                else
-                {
-                    time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                    if (time < startTime)
-                    {
-                        newStartIndex++;
-                        time = static_cast<long>(floor(0.5 + timeStamps(1, newStartIndex)));
-                        break;
-                    }
-                }
-            }
-        }
-
-        startIndex = newStartIndex;
-    } //end (startTime != previousStartTime) || (startTime != previousEndTime)
-
-    else
-    {
-        if (startTime == previousStartTime)
-            startIndex = previousStartIndex;
-        else if (startTime == previousEndTime)
-        {
-            if (static_cast<long>(floor(0.5 + timeStamps(1, previousEndIndex))) < startTime)
-            {
-                startIndex = previousEndIndex + 1;
-                if (startIndex > nbEvents)
-                    startIndex = nbEvents;
-            }
-            else
-                startIndex = previousEndIndex;
-        }
-    }
+    long startIndex = qMin(firstEventAtOrAfter(eventTime), nbEvents);
 
     if (eventId != -1)
     {
@@ -1143,22 +366,6 @@ void EventsProvider::undo()
     eventsUndo.setSize(0, 0);
     timeStampsUndo.setSize(0, 0);
     eventDescriptionCounterUndo.clear();
-
-    previousStartTime = 0;
-    previousStartIndex = 1;
-
-    if (nbEvents == 0)
-    {
-        previousEndIndex = 1;
-        previousEndTime = 0;
-        fileMaxTime = 0;
-    }
-    else
-    {
-        previousEndIndex = nbEvents;
-        previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-        fileMaxTime = previousEndTime;
-    }
 
     if (eventDescriptionCounter.count() < eventDescriptionCounterRedo.count())
     {
@@ -1205,22 +412,6 @@ void EventsProvider::redo()
     eventsRedo.setSize(0, 0);
     timeStampsRedo.setSize(0, 0);
     eventDescriptionCounterRedo.clear();
-
-    previousStartTime = 0;
-    previousStartIndex = 1;
-
-    if (nbEvents == 0)
-    {
-        previousEndIndex = 1;
-        previousEndTime = 0;
-        fileMaxTime = 0;
-    }
-    else
-    {
-        previousEndIndex = nbEvents;
-        previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-        fileMaxTime = previousEndTime;
-    }
 
     if (eventDescriptionCounter.count() < eventDescriptionCounterUndo.count())
     {
@@ -1313,11 +504,6 @@ void EventsProvider::removeEvent(int selectedEventId, double time)
         timeStamps.copySubset(timeStampsUndo, (timeIndex + 1), nbEvents, timeIndex);
 
         nbEvents--;
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = nbEvents;
-        previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-        fileMaxTime = previousEndTime;
     }
     else
     {
@@ -1325,11 +511,6 @@ void EventsProvider::removeEvent(int selectedEventId, double time)
         timeStamps.setSize(0, 0);
 
         nbEvents = 0;
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = 1;
-        previousEndTime = 0;
-        fileMaxTime = 0;
     }
 }
 
@@ -1349,34 +530,19 @@ void EventsProvider::addEvent(const QString& eventDescriptionToAdd, double time)
 
     if (nbEvents != 0)
     {
-        long timeIndex = findIndex(time);
-        double timeAtTimeIndex = timeStamps(1, timeIndex);
+        //The event goes after the events at its time.
+        const long timeIndex = firstEventAfter(time);
 
         events.setSize(1, nbEvents + 1);
         timeStamps.setSize(1, nbEvents + 1);
 
-        if (time <= timeAtTimeIndex)
-        {
-            events.copySubset(eventsUndo, 1, (timeIndex - 1), 1);
-            events(1, timeIndex) = EventDescription(eventDescriptionToAdd);
-            events.copySubset(eventsUndo, timeIndex, nbEvents, timeIndex + 1);
+        events.copySubset(eventsUndo, 1, (timeIndex - 1), 1);
+        events(1, timeIndex) = EventDescription(eventDescriptionToAdd);
+        events.copySubset(eventsUndo, timeIndex, nbEvents, timeIndex + 1);
 
-            timeStamps.copySubset(timeStampsUndo, 1, (timeIndex - 1), 1);
-            timeStamps(1, timeIndex) = time;
-            timeStamps.copySubset(timeStampsUndo, timeIndex, nbEvents, timeIndex + 1);
-        }
-        else
-        {
-            events.copySubset(eventsUndo, 1, timeIndex, 1);
-            events(1, timeIndex + 1) = EventDescription(eventDescriptionToAdd);
-            events.copySubset(eventsUndo, timeIndex + 1, nbEvents, timeIndex + 2);
-
-            timeStamps.copySubset(timeStampsUndo, 1, timeIndex, 1);
-            timeStamps(1, timeIndex + 1) = time;
-            timeStamps.copySubset(timeStampsUndo, timeIndex + 1, nbEvents, timeIndex + 2);
-        }
-        if (fileMaxTime < static_cast<long>(floor(0.5 + time)))
-            fileMaxTime = static_cast<long>(floor(0.5 + time));
+        timeStamps.copySubset(timeStampsUndo, 1, (timeIndex - 1), 1);
+        timeStamps(1, timeIndex) = time;
+        timeStamps.copySubset(timeStampsUndo, timeIndex, nbEvents, timeIndex + 1);
     }
     //New (empty) event file
     else
@@ -1386,14 +552,9 @@ void EventsProvider::addEvent(const QString& eventDescriptionToAdd, double time)
 
         events(1, 1) = EventDescription(eventDescriptionToAdd);
         timeStamps(1, 1) = time;
-        fileMaxTime = static_cast<long>(floor(0.5 + time));
     }
 
     nbEvents++;
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = nbEvents;
-    previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
 
     //Check if the added event description is a new event description.
     bool newDescription = !eventIds.contains(EventDescription(eventDescriptionToAdd));

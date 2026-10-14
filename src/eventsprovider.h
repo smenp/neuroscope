@@ -185,13 +185,6 @@ class EventsProvider : public DataProvider
     void updateSamplingRate(double rate)
     {
         currentSamplingRate = static_cast<double>(rate / 1000.0);
-
-        //Initialize the variables
-        previousStartTime = 0;
-        previousStartIndex = 1;
-        previousEndIndex = nbEvents;
-        previousEndTime = static_cast<long>(floor(0.5 + timeStamps(1, nbEvents)));
-        fileMaxTime = previousEndTime;
     }
 
     /** Updates the provider data to take into account the renaming of an event.
@@ -270,18 +263,6 @@ class EventsProvider : public DataProvider
     /**A 1 line array containing the event ids for an redo action.*/
     pArray<EventDescription> eventsRedo;
 
-    /**The start time for the previously requested data.*/
-    long previousStartTime;
-
-    /**The end time for the previously requested data.*/
-    long previousEndTime;
-
-    /**The start index for the previously requested data.*/
-    long previousStartIndex;
-
-    /**The end index for the previously requested data.*/
-    long previousEndIndex;
-
     /**Number of events in the event file the provider provides the data for.*/
     long nbEvents;
 
@@ -293,9 +274,6 @@ class EventsProvider : public DataProvider
 
     /**The value to use as the length for the event descriptions in the event palette.*/
     int descriptionLength;
-
-    /**The maximum time, in miliseconds, contained in the file.*/
-    long fileMaxTime;
 
     /**Represents the percentage from the begining of the window where the events are display when browsing.*/
     float eventPosition;
@@ -320,6 +298,24 @@ class EventsProvider : public DataProvider
   * @param initiator instance requesting the data.
   */
     void retrieveData(long startTime, long endTime, QObject* initiator);
+
+    /**Gets the events of the window from @p startTime to @p endTime, in milliseconds.
+  * @param startTime beginning of the window.
+  * @param endTime end of the window.
+  * @param times receives the sample of each event, from the start of the window, at the current sampling rate.
+  * @param ids receives the id of each event.
+  */
+    void eventsInWindow(long startTime, long endTime, Array<dataType>& times, Array<int>& ids);
+
+    /**Returns the index of the first event at or after @p time, nbEvents + 1 if there is none.
+  * @param time time in milliseconds.
+  */
+    long firstEventAtOrAfter(double time);
+
+    /**Returns the index of the first event after @p time, nbEvents + 1 if there is none.
+  * @param time time in milliseconds.
+  */
+    long firstEventAfter(double time);
 
     /**Finds the event index corresponding to the given time and event id.
   * @param eventTime time to look up.

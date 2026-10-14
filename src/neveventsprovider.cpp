@@ -219,13 +219,6 @@ int NEVEventsProvider::loadData()
     // Update internal struture
     this->updateMappingAndDescriptionLength();
 
-    //Initialize the variables
-    previousStartTime = 0;
-    previousStartIndex = 1;
-    previousEndIndex = this->nbEvents;
-    previousEndTime = static_cast<long>(floor(0.5 + this->timeStamps(1, this->nbEvents)));
-    fileMaxTime = previousEndTime;
-
     return OK;
 
 fail:

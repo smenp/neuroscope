@@ -15,7 +15,6 @@
  ***************************************************************************/
 
 #include "apptestutils.h"
-#include "tracewidget.h"
 
 #include <QAction>
 #include <QLineEdit>
@@ -129,3 +128,4 @@ class TestNeuroscopeDoc : public QObject
 
 QTEST_MAIN(TestNeuroscopeDoc)
 #include "test_neuroscopedoc.moc"
+#include "tracewidget.h"
