@@ -16,9 +16,12 @@
  ***************************************************************************/
 
 #include "apptestutils.h"
+#include "itemiconview.h"
+#include "itempalette.h"
 #include "neuroscopeview.h"
 #include "tracewidget.h"
 
+#include <QTabWidget>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -38,10 +41,21 @@ enum class Kind
     Events,
 };
 
+/** What is done in the palette of the browsed file. */
+enum class Step
+{
+    ClickGroup,     ///< click on the group label: shows all items, or hides them
+    MarkGroup,      ///< Ctrl+Alt click on the group label: marks the shown items for browsing, or unmarks them
+    MarkSecondItem, ///< Ctrl+Alt click on the second item, if shown: marks it for browsing, or unmarks it
+    ClickFirstItem, ///< click on the first item: shows only it
+    DeselectAll,    ///< Edit > Deselect All
+};
+
 } // namespace
 
 Q_DECLARE_METATYPE(testutils::Spike)
 Q_DECLARE_METATYPE(Kind)
+Q_DECLARE_METATYPE(Step)
 
 class TestBrowsing : public QObject
 {
@@ -94,6 +108,43 @@ class TestBrowsing : public QObject
         QMetaObject::invokeMethod(app, kind == Kind::Spikes ? "slotShowNextCluster" : "slotShowNextEvent");
     }
 
+    /** Does @p steps with the mouse in the palette of the only file of @p app. */
+    static void inPalette(NeuroscopeApp* app, Kind kind, const QList<Step>& steps)
+    {
+        ItemPalette* palette = nullptr;
+        for (ItemPalette* candidate: app->findChildren<ItemPalette*>())
+            if (candidate->objectName().contains(kind == Kind::Spikes ? "clusterPanel" : "eventPanel"))
+                palette = candidate;
+        // The application shows the items selected in the palette of its current tab only.
+        qobject_cast<QTabWidget*>(palette->parentWidget()->parentWidget())->setCurrentWidget(palette);
+        ItemIconView* items = palette->findChild<ItemIconView*>();
+        GroupNameLabel* label = palette->findChild<GroupNameLabel*>();
+        const Qt::KeyboardModifiers ctrlAlt = Qt::ControlModifier | Qt::AltModifier;
+        const auto clickItem = [items](int row, Qt::KeyboardModifiers modifiers)
+        { QTest::mouseClick(items->viewport(), Qt::LeftButton, modifiers, items->visualItemRect(items->item(row)).center()); };
+        for (Step step: steps)
+        {
+            switch (step)
+            {
+            case Step::ClickGroup:
+                QTest::mouseClick(label, Qt::LeftButton);
+                break;
+            case Step::MarkGroup:
+                QTest::mouseClick(label, Qt::LeftButton, ctrlAlt);
+                break;
+            case Step::MarkSecondItem:
+                clickItem(1, ctrlAlt);
+                break;
+            case Step::ClickFirstItem:
+                clickItem(0, Qt::NoModifier);
+                break;
+            case Step::DeselectAll:
+                QMetaObject::invokeMethod(app, "slotDeselectAll");
+                break;
+            }
+        }
+    }
+
   private Q_SLOTS:
     void initTestCase()
     {
@@ -133,6 +184,36 @@ class TestBrowsing : public QObject
             const long startTime = app->activeView()->getStartTime();
             QVERIFY2(startTime == 160, qPrintable(QString("other file loaded %1: start %2 ms").arg(otherFirst ? "first" : "second").arg(startTime)));
         }
+    }
+
+    void browseWhatThePaletteMarks_data()
+    {
+        QTest::addColumn<Kind>("kind");
+        QTest::addColumn<QList<Step>>("steps");
+        QTest::addColumn<long>("startTime");
+        // The two label clicks share one toggle: after ClickGroup has shown all items, MarkGroup first unmarks them.
+        QTest::newRow("event, group marked and unmarked")
+            << Kind::Events << QList<Step>{ Step::ClickGroup, Step::MarkGroup, Step::MarkGroup, Step::MarkGroup } << 100L;
+        QTest::newRow("spike, item marked before its group")
+            << Kind::Spikes << QList<Step>{ Step::ClickGroup, Step::MarkGroup, Step::MarkSecondItem, Step::MarkGroup } << 160L;
+        QTest::newRow("event, item shown after Deselect All")
+            << Kind::Events << QList<Step>{ Step::ClickGroup, Step::MarkGroup, Step::MarkGroup, Step::DeselectAll, Step::ClickFirstItem }
+            << 100L;
+    }
+
+    // Browsing goes to the next spike or event of the items marked in the palette only. The first, second and third items
+    // are clusters 0, 1 and 2, or the events described as cluster0, cluster1 and cluster2.
+    void browseWhatThePaletteMarks()
+    {
+        QFETCH(Kind, kind);
+        QFETCH(QList<Step>, steps);
+        QFETCH(long, startTime);
+        auto app = openWith(kind, { { { 3000, 1 }, { 5200, 1 }, { 6400, 0 }, { 7000, 2 } } });
+
+        inPalette(app.get(), kind, steps);
+        browseToNext(app.get(), kind);
+
+        QCOMPARE(app->activeView()->getStartTime(), startTime);
     }
 };
 

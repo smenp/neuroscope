@@ -285,7 +285,7 @@ void ItemPalette::slotMousePressed(const QString& sourceGroupName, bool shiftKey
                             isInSelectItems = true; //redrawItem sets it back to false
                         }
                     }
-                    itemsToSkip.append(i);
+                    itemsToSkip.append(item->data(ItemIconView::INDEXICON).toInt());
                 }
             }
             else
@@ -302,11 +302,9 @@ void ItemPalette::slotMousePressed(const QString& sourceGroupName, bool shiftKey
                             redrawItem(iconView, i, browsingMap);
                             isInSelectItems = true; //redrawItem sets it back to false
                         }
-                        else
-                        {
-                            itemsToSkip.append(i);
-                        }
                     }
+                    else
+                        itemsToSkip.append(item->data(ItemIconView::INDEXICON).toInt());
                 }
             }
             browsingStatus.insert(sourceGroupName, browsingMap);
@@ -341,16 +339,13 @@ void ItemPalette::slotMousePressed(const QString& sourceGroupName, bool shiftKey
                 QList<int> itemsToSkip;
                 for (int i = 0; i < iconView->count(); ++i)
                 {
-                    //QListWidgetItem * item = iconView->item(i);
                     if (browsingMap[i])
                     {
                         browsingMap[i] = false;
                         redrawItem(iconView, i, browsingMap);
                         isInSelectItems = true; //redrawItem sets it back to false
-                        itemsToSkip.append(i);
                     }
-                    else
-                        itemsToSkip.append(i);
+                    itemsToSkip.append(iconView->item(i)->data(ItemIconView::INDEXICON).toInt());
                 }
                 browsingStatus.insert(sourceGroupName, browsingMap);
                 emit updateItemsToSkip(sourceGroupName, itemsToSkip);
@@ -1024,25 +1019,13 @@ void ItemPalette::deselectAllItems()
         QList<int> itemsToSkip;
         for (int i = 0; i < iterator2.value()->count(); ++i)
         {
-            QListWidgetItem* item = iterator2.value()->item(i);
-            int currentIndex = item->data(ItemIconView::INDEXICON).toInt();
-            if (browsingMap[currentIndex])
+            if (browsingMap[i])
             {
-                browsingMap[currentIndex] = false;
-                QString label = item->text();
-                redrawItem(iterator2.value(), currentIndex, browsingMap);
+                browsingMap[i] = false;
+                redrawItem(iterator2.value(), i, browsingMap);
                 isInSelectItems = true; //redrawItem sets it back to false
-                QList<QListWidgetItem*> lstItem = iterator.value()->findItems(label, Qt::MatchExactly);
-                if (!lstItem.isEmpty())
-                {
-                    i = iterator.value()->row(lstItem.first());
-                }
-                itemsToSkip.append(item->data(ItemIconView::INDEXICON).toInt());
             }
-            else
-            {
-                itemsToSkip.append(item->data(ItemIconView::INDEXICON).toInt());
-            }
+            itemsToSkip.append(iterator2.value()->item(i)->data(ItemIconView::INDEXICON).toInt());
         }
         browsingStatus.insert(groupName, browsingMap);
         emit updateItemsToSkip(groupName, itemsToSkip);
