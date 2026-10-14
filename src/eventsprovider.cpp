@@ -24,6 +24,8 @@
 #include <QDebug>
 
 #include <algorithm>
+#include <utility>
+#include <vector>
 
 //include files for the application
 #include "eventsprovider.h"
@@ -129,11 +131,28 @@ int EventsProvider::loadData()
         return INCORRECT_CONTENT;
     }
 
+    sortByTime();
     updateMappingAndDescriptionLength();
 
     return OK;
 }
 
+
+void EventsProvider::sortByTime()
+{
+    //Every search by time assumes the events in time order, as event files list them; a drag in NeuroScope 3.0.0-rc1 or earlier could write an event out of order.
+    std::vector<std::pair<double, EventDescription>> sorted;
+    sorted.reserve(nbEvents);
+    for (long i = 0; i < nbEvents; ++i)
+        sorted.emplace_back(timeStamps[i], events[i]);
+    std::stable_sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b)
+                     { return a.first < b.first; });
+    for (long i = 0; i < nbEvents; ++i)
+    {
+        timeStamps[i] = sorted[i].first;
+        events[i] = sorted[i].second;
+    }
+}
 
 void EventsProvider::updateMappingAndDescriptionLength()
 {

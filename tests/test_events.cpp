@@ -226,6 +226,8 @@ class TestEvents : public QObject
         // A sample is 0.8 ms: the event, 49.45 ms into the window, is drawn on the sample at 49.6 ms, whose time,
         // 1000.6 ms, is after the event.
         QTest::newRow("time of its sample rounding up") << 1250.0 << QList<double>{ 700, 1000.45, 1300, 1600 } << 1000.45 << 951L << 100L;
+        // The file lists the event at 1000 ms after the one at 1300 ms; the window from 650 ms to 1400 ms shows it.
+        QTest::newRow("file not in time order") << SAMPLING_RATE << QList<double>{ 700, 1300, 1000, 1600 } << 1000.0 << 650L << 750L;
     }
 
     // Remove Event removes the event selected in the window shown, and no other.

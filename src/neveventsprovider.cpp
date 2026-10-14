@@ -217,6 +217,7 @@ int NEVEventsProvider::loadData()
     events.copySubset(tempDescription, this->nbEvents);
 
     // Update internal struture
+    this->sortByTime();
     this->updateMappingAndDescriptionLength();
 
     return OK;

@@ -179,6 +179,9 @@ class EventsProvider : public DataProvider
     /** Updates mapping saved in eventIds and idsDescriptions as well as descriptionLength based on loaded data. */
     void updateMappingAndDescriptionLength();
 
+    /** Orders the loaded events by time, keeping the file order of events at the same time. */
+    void sortByTime();
+
     /**Updates the sampling rate for the current document.
   * @param rate sampling rate.
   */
