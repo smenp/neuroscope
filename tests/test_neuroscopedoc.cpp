@@ -15,7 +15,11 @@
  ***************************************************************************/
 
 #include "apptestutils.h"
+#include "tracewidget.h"
 
+#include <QAction>
+#include <QLineEdit>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -63,6 +67,63 @@ class TestNeuroscopeDoc : public QObject
 
         QCOMPARE(doc->getChannelNb(), nbChannels);
         QCOMPARE(doc->getChannelLabels()->size(), nbChannels);
+    }
+
+    void closeWithTheFocusInTheStartTime_data()
+    {
+        QTest::addColumn<QString>("closing");
+        QTest::newRow("close the window") << "window";
+        QTest::newRow("quit") << "quit";
+        QTest::newRow("close the only display") << "display";
+    }
+
+    // Closing takes the keyboard focus from the start time box, which then applies the digits typed in it.
+    void closeWithTheFocusInTheStartTime()
+    {
+        QFETCH(QString, closing);
+        const QString datPath = writeRecording(QDir(dir.path()), QString("close-") + QTest::currentDataTag(), 1, 1250, 200 * 1250);
+        auto app = testutils::openRecording(datPath);
+        app->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(app.get()));
+        QSpinBox* seconds = nullptr;
+        for (QSpinBox* box: app->findChild<TraceWidget*>()->findChildren<QSpinBox*>())
+        {
+            if (box->suffix().trimmed() == "s")
+            {
+                seconds = box;
+            }
+        }
+        QVERIFY(seconds);
+        QLineEdit* edit = seconds->findChild<QLineEdit*>();
+        QTest::mouseClick(edit, Qt::LeftButton);
+        QVERIFY(seconds->hasFocus());
+        QTest::keyClick(edit, Qt::Key_A, Qt::ControlModifier);
+        QTest::keyClicks(edit, "5");
+
+        if (closing == "window")
+        {
+            QVERIFY(app->close());
+        }
+        else if (closing == "quit")
+        {
+            // File > Quit, through its action: a platform may bind no key to Quit.
+            QAction* quit = nullptr;
+            for (QAction* action: app->findChildren<QAction*>())
+            {
+                if (action->text() == "Quit")
+                {
+                    quit = action;
+                }
+            }
+            QVERIFY(quit);
+            quit->trigger();
+        }
+        else
+        {
+            QTest::keySequence(edit, QKeySequence(Qt::CTRL | Qt::Key_W));
+        }
+
+        QVERIFY(!app->getDocument()->isADocumentToClose());
     }
 };
 
