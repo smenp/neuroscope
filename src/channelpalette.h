@@ -124,6 +124,8 @@ class ChannelPalette : public QScrollArea
     void slotChannelsMoved(const QString& targetGroup, QListWidgetItem* after);
     /**Channels moved around in a group.*/
     void slotChannelsMoved(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after);
+    /**Selects again the dragged channels still in their group once the drag is over.*/
+    void slotDragFinished(const QList<int>& channelIds, const QString& sourceGroup);
     void trashChannelsMovedAround(const QList<int>& channelIds, const int afterId, bool beforeFirst);
     void discardChannels();
     void discardChannels(const QList<int>& channelsToDiscard);

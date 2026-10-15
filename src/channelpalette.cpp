@@ -959,6 +959,7 @@ void ChannelPalette::createGroup(int id)
     connect(this, SIGNAL(paletteResized(int, int)), group, SLOT(reAdjustSize(int, int)));
     connect(iconView, SIGNAL(channelsMoved(QString, QListWidgetItem*)), this, SLOT(slotChannelsMoved(QString, QListWidgetItem*)));
     connect(iconView, SIGNAL(channelsMoved(QList<int>, QString, QListWidgetItem*)), this, SLOT(slotChannelsMoved(QList<int>, QString, QListWidgetItem*)));
+    connect(iconView, SIGNAL(dragFinished(QList<int>, QString)), this, SLOT(slotDragFinished(QList<int>, QString)));
 
     connect(label, SIGNAL(middleClickOnLabel(QString)), this, SLOT(slotMidButtonPressed(QString)));
     connect(label, SIGNAL(leftClickOnLabel(QString)), this, SLOT(slotMousePressed(QString)));
@@ -1699,7 +1700,8 @@ static void selectChannelItems(ChannelIconView* view, const QList<int>& channelI
 
 void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after)
 {
-    const SelectionBlocker batch(this, true);
+    //The moved channels are selected again, and the selection signalled, once the drag is over (slotDragFinished()).
+    const SelectionBlocker blocker(this);
 
     QList<int>::const_iterator iterator;
     QPainter painter;
@@ -1735,6 +1737,17 @@ void ChannelPalette::moveChannels(const QList<int>& channelIds, const QString& s
 
     groupsChannels->remove(sourceGroup.toInt());
     groupsChannels->insert(sourceGroup.toInt(), sourceChannels);
+}
+
+void ChannelPalette::slotDragFinished(const QList<int>& channelIds, const QString& sourceGroup)
+{
+    //A move drop makes QAbstractItemView::startDrag() remove the selected items of the view the drag started from,
+    //so channels moved within their group can only be selected again once the drag is over.
+    const SelectionBlocker batch(this, true);
+    if (ChannelIconView* view = iconviewDict.value(sourceGroup))
+    {
+        selectChannelItems(view, channelIds);
+    }
 }
 
 void ChannelPalette::slotChannelsMoved(const QList<int>& channelIds, const QString& sourceGroup, QListWidgetItem* after)

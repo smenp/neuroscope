@@ -95,6 +95,8 @@ class ChannelIconView : public QListWidget
 
     void removeGroup(const QString& name);
     void moveListItem(const QList<int>& listId, const QString& sourceGroupName, const QString& destGroupName, int index, bool moveAll);
+    /**Emitted when a drag of the channels @p channelIds out of the group @p sourceGroup is over, dropped or not.*/
+    void dragFinished(const QList<int>& channelIds, const QString& sourceGroup);
     /**Emitted when items are inserted or removed, so the height of the view has to be adjusted.*/
     void rowInsered();
 
@@ -104,6 +106,7 @@ class ChannelIconView : public QListWidget
     void mousePressEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* e) override;
     QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override;
+    void startDrag(Qt::DropActions supportedActions) override;
     bool dropMimeData(int index, const QMimeData* data, Qt::DropAction action) override;
     Qt::DropActions supportedDropActions() const override
     {

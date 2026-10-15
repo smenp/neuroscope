@@ -127,6 +127,17 @@ QMimeData* ChannelIconView::mimeData(const QList<QListWidgetItem*>& items) const
     return mimedata;
 }
 
+void ChannelIconView::startDrag(Qt::DropActions supportedActions)
+{
+    QList<int> channelIds;
+    for (const QListWidgetItem* item: selectedItems())
+    {
+        channelIds.append(ChannelIconViewItem::id(item));
+    }
+    QListWidget::startDrag(supportedActions);
+    emit dragFinished(channelIds, objectName());
+}
+
 void ChannelIconView::setNewWidth(int width)
 {
     setFixedWidth(width);
