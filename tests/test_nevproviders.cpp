@@ -112,6 +112,22 @@ class TestNEVProviders : public QObject
         QCOMPARE(describe(request(*elec2, 0, 1000).data), QString("(6000, 0)"));
     }
 
+    // An electrode that recorded no spikes gives a provider without spikes.
+    void channelWithoutSpikes()
+    {
+        QList<NevPacket> packets = PACKETS;
+        packets.removeIf([](const NevPacket& packet) { return packet.id == 2; });
+        writeFile(path("silent.nev"), nevFile(TIME_RESOLUTION, ELECTRODES, packets));
+        QList<NEVClustersProvider*> providers = NEVClustersProvider::fromFile(path("silent.nev"), {"elec1", "elec2"},
+                                                                              TIME_RESOLUTION, 120000, 25);
+        QCOMPARE(providers.size(), 2);
+        std::unique_ptr<NEVClustersProvider> elec1(providers[0]);
+        std::unique_ptr<NEVClustersProvider> elec2(providers[1]);
+
+        QCOMPARE(elec2->clusterIdList(), QList<int>());
+        QCOMPARE(request(*elec2, 0, 3000).data.cols, std::int64_t(0));
+    }
+
     void clustersAtLowerDisplaySamplingRate()
     {
         // Showing the spikes over a 1 kHz signal: times are converted to the display sampling rate.

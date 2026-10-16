@@ -202,10 +202,10 @@ class ClustersProvider : public DataProvider
   */
     void retrieveData(long startTime, long endTime, QObject* initiator, long startTimeInRecordingUnits);
 
-    /**Sets fileMaxTime from the time of the last spike.*/
+    /**Sets fileMaxTime from the time of the last spike, 0 without spikes.*/
     void updateFileMaxTime()
     {
-        fileMaxTime = static_cast<long>(floor(0.5 + clusters(2, nbSpikes) * 1000.0 / samplingRate));
+        fileMaxTime = nbSpikes == 0 ? 0 : static_cast<long>(floor(0.5 + clusters(2, nbSpikes) * 1000.0 / samplingRate));
     }
 
     /**Returns the first sample of a window in recording units.

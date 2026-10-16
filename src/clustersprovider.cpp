@@ -89,7 +89,7 @@ int ClustersProvider::loadData()
     if (nbSpikes == 0)
     {
         clusters.setSize(0, 0);
-        fileMaxTime = 0;
+        updateFileMaxTime();
 
         return OK;
     }
